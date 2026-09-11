@@ -237,29 +237,29 @@ export default function NewReceiptPage() {
 
         {/* Card Principal de Carga y Drag & Drop */}
         <Card className="border-border shadow-sm overflow-hidden">
-          <CardHeader className="bg-muted/30 border-b">
-            <div className="flex items-center justify-between">
+          <CardHeader className="bg-muted/30 border-b p-4 sm:p-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
               <div>
-                <CardTitle className="flex items-center gap-2">
-                  <Sparkles className="h-5 w-5 text-blue-600" />
+                <CardTitle className="text-base sm:text-lg flex items-center gap-2">
+                  <Sparkles className="h-5 w-5 text-blue-600 shrink-0" />
                   <span>Subida de Archivos o Fotografía</span>
                 </CardTitle>
-                <CardDescription>
+                <CardDescription className="text-xs sm:text-sm">
                   Formatos soportados: JPG, PNG, WebP y PDF (hasta 15MB).
                 </CardDescription>
               </div>
-              <Badge variant="outline" className="bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+              <Badge variant="outline" className="w-fit bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300 text-xs">
                 Chile • CLP / IVA 19%
               </Badge>
             </div>
           </CardHeader>
 
-          <CardContent className="p-6 space-y-6">
+          <CardContent className="p-4 sm:p-6 space-y-5 sm:space-y-6">
             {/* Zona Drag & Drop */}
             <div
               onDragOver={(e) => e.preventDefault()}
               onDrop={handleDrop}
-              className={`border-2 border-dashed rounded-xl p-8 text-center transition-all cursor-pointer flex flex-col items-center justify-center min-h-[220px] ${
+              className={`border-2 border-dashed rounded-xl p-5 sm:p-8 text-center transition-all cursor-pointer flex flex-col items-center justify-center min-h-[180px] sm:min-h-[220px] ${
                 file
                   ? 'border-blue-500 bg-blue-50/40 dark:bg-blue-950/20'
                   : 'border-muted-foreground/30 hover:border-blue-500 hover:bg-muted/30'
