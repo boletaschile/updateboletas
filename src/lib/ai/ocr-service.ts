@@ -1,6 +1,89 @@
 import OpenAI from 'openai';
+import { zodResponseFormat } from 'openai/helpers/zod';
 import { AIReceiptAnalysisResponse, AIReceiptAnalysisResponseSchema } from './schema';
 import { RECEIPT_SYSTEM_PROMPT } from './prompt';
+
+/**
+ * Normaliza cualquier formato alternativo de respuesta a la estructura requerida
+ */
+function normalizeAIResponse(raw: any, defaultExpenseType: string = 'personal'): any {
+  if (!raw || typeof raw !== 'object') return raw;
+
+  if (raw.document && Array.isArray(raw.items)) {
+    return raw;
+  }
+
+  const source = raw.data || raw.receipt || raw.boleta || raw;
+  const doc = source.document || source;
+  const rawItems = source.items || source.products || source.line_items || source.articulos || [];
+
+  const total = Number(doc.total || doc.total_amount || doc.monto_total || 0);
+  const net = Number(doc.net_amount || doc.monto_neto || Math.round(total / 1.19));
+  const tax = Number(doc.tax_amount || doc.iva || (total - net));
+
+  return {
+    document: {
+      merchant_name: String(doc.merchant_name || doc.comercio || doc.nombre_comercio || doc.store || 'Comercio Registrado'),
+      legal_name: doc.legal_name || doc.razon_social || null,
+      merchant_rut: doc.merchant_rut || doc.rut || doc.rut_emisor || null,
+      merchant_address: doc.merchant_address || doc.direccion || null,
+      receipt_number: doc.receipt_number || doc.numero_boleta || doc.folio || null,
+      document_type: doc.document_type || 'boleta',
+      date: doc.date || doc.fecha || new Date().toISOString().split('T')[0],
+      time: doc.time || doc.hora || null,
+      currency: 'CLP',
+      subtotal: Number(doc.subtotal || total),
+      discount: Number(doc.discount || 0),
+      net_amount: net,
+      tax_amount: tax,
+      tip: Number(doc.tip || 0),
+      total: total,
+      payment_method: doc.payment_method || doc.medio_pago || 'Tarjeta Débito',
+      card_last_four: doc.card_last_four || null,
+      authorization_code: doc.authorization_code || null,
+      confidence: Number(doc.confidence ?? 0.95),
+    },
+    items: Array.isArray(rawItems) && rawItems.length > 0
+      ? rawItems.map((it: any) => ({
+          original_name: String(it.original_name || it.name || it.description || it.producto || 'Producto'),
+          normalized_name: it.normalized_name || it.name || null,
+          sku: it.sku || null,
+          quantity: Number(it.quantity || it.cantidad || 1),
+          unit: String(it.unit || 'unidad'),
+          unit_price: Number(it.unit_price || it.precio_unitario || it.line_total || total),
+          discount: Number(it.discount || 0),
+          line_total: Number(it.line_total || it.total || total),
+          category: String(it.category || it.categoria || (defaultExpenseType === 'business' ? 'Insumos de oficina' : 'Supermercado')),
+          subcategory: it.subcategory || null,
+          expense_type: it.expense_type || defaultExpenseType,
+          business_percentage: Number(it.business_percentage ?? (defaultExpenseType === 'business' ? 100 : 0)),
+          personal_percentage: Number(it.personal_percentage ?? (defaultExpenseType === 'personal' ? 100 : 0)),
+          confidence: Number(it.confidence ?? 0.9),
+          requires_review: Boolean(it.requires_review ?? false),
+        }))
+      : [
+          {
+            original_name: 'CONSUMO / COMPRA GENERAL',
+            normalized_name: 'Gasto registrado según comprobante',
+            sku: null,
+            quantity: 1,
+            unit: 'unidad',
+            unit_price: total,
+            discount: 0,
+            line_total: total,
+            category: defaultExpenseType === 'business' ? 'Insumos de oficina' : 'Supermercado',
+            subcategory: null,
+            expense_type: defaultExpenseType,
+            business_percentage: defaultExpenseType === 'business' ? 100 : 0,
+            personal_percentage: defaultExpenseType === 'personal' ? 100 : 0,
+            confidence: 0.9,
+            requires_review: false,
+          }
+        ],
+    warnings: Array.isArray(source.warnings) ? source.warnings : [],
+    requires_review: true,
+  };
+}
 
 /**
  * Procesa una imagen o documento de boleta usando OpenAI GPT-4o-mini con Structured Outputs / JSON
@@ -63,14 +146,15 @@ export async function analyzeReceiptWithAI(params: {
       const response = await openai.chat.completions.create({
         model,
         messages,
-        response_format: { type: 'json_object' },
+        response_format: zodResponseFormat(AIReceiptAnalysisResponseSchema, 'receipt_analysis'),
         temperature: 0.1,
       });
 
       const rawContent = response.choices[0]?.message?.content;
       if (rawContent) {
         const parsed = JSON.parse(rawContent);
-        const validated = AIReceiptAnalysisResponseSchema.parse(parsed);
+        const normalized = normalizeAIResponse(parsed, params.defaultExpenseType);
+        const validated = AIReceiptAnalysisResponseSchema.parse(normalized);
         return validated;
       }
     } catch (err: any) {
