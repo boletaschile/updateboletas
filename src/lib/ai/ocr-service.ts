@@ -86,15 +86,15 @@ function generateDeterministicHeuristicAnalysis(params: {
   const text = params.ocrText || '';
   const expenseType = params.defaultExpenseType || 'personal';
 
-  // Buscar RUT chileno con regex
+  // Buscar RUT chileno con regex o usar RUT válido de prueba
   const rutMatch = text.match(/\b([0-9]{1,2}\.?[0-9]{3}\.?[0-9]{3}-?[0-9kK])\b/);
-  const rut = rutMatch ? rutMatch[1] : '76.999.888-1';
+  const rut = rutMatch ? rutMatch[1] : '76.123.456-0';
 
   // Buscar número de boleta
   const receiptNumberMatch = text.match(/(?:boleta|factura|comprobante|n[°ºo]|nro\.?)\s*:?\s*([A-Za-z0-9-]+)/i);
   const receiptNumber = receiptNumberMatch ? receiptNumberMatch[1] : `B-${Math.floor(100000 + Math.random() * 900000)}`;
 
-  // Buscar total
+  // Buscar total o generar simulación
   const totalMatch = text.match(/(?:total|monto total|total a pagar|total pagado)\s*:?\s*\$?\s*([0-9.,]+)/i);
   let total = 32500;
   if (totalMatch) {
@@ -108,7 +108,7 @@ function generateDeterministicHeuristicAnalysis(params: {
 
   return {
     document: {
-      merchant_name: 'Comercio Detectado por OCR',
+      merchant_name: 'Comercio Registrado (Modo Demo)',
       legal_name: 'Comercializadora e Inversiones SpA',
       merchant_rut: rut,
       merchant_address: 'Av. Providencia 1420, Santiago',
@@ -126,11 +126,11 @@ function generateDeterministicHeuristicAnalysis(params: {
       payment_method: 'Tarjeta Débito',
       card_last_four: '9182',
       authorization_code: '482019',
-      confidence: 0.91,
+      confidence: 0.85,
     },
     items: [
       {
-        original_name: 'CONSUMO / COMPRA GENERAL DETECTADA',
+        original_name: 'CONSUMO / COMPRA GENERAL',
         normalized_name: 'Gasto registrado según comprobante',
         sku: null,
         quantity: 1,
@@ -143,12 +143,13 @@ function generateDeterministicHeuristicAnalysis(params: {
         expense_type: expenseType,
         business_percentage: expenseType === 'business' ? 100 : expenseType === 'mixed' ? 50 : 0,
         personal_percentage: expenseType === 'personal' ? 100 : expenseType === 'mixed' ? 50 : 0,
-        confidence: 0.89,
+        confidence: 0.85,
         requires_review: false,
       },
     ],
     warnings: [
-      'Datos extraídos preliminarmente. Por favor revise y confirme los montos antes de aprobar el gasto.',
+      '⚠️ MODO SIMULACIÓN ACTIVO: No se ha detectado OPENAI_API_KEY en Vercel. Para que la IA (GPT-4o-mini Vision) lea automáticamente los productos, el RUT y el total real de tu fotografía, ingresa tu API Key en Vercel > Settings > Environment Variables.',
+      'Por favor revise y confirme los datos antes de aprobar el gasto.',
     ],
     requires_review: true,
   };
