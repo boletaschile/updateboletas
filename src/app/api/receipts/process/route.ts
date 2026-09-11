@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { analyzeReceiptWithAI } from '@/lib/ai/ocr-service';
 import { AIReceiptAnalysisResponseSchema } from '@/lib/ai/schema';
 
+export const maxDuration = 60; // Hasta 60s para procesamiento con visión IA en Vercel
+
 export async function POST(request: NextRequest) {
   try {
     const contentType = request.headers.get('content-type') || '';
