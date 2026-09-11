@@ -25,7 +25,14 @@ import {
   ShieldAlert,
   Camera,
   Smartphone,
+  Wand2,
+  Palette,
 } from 'lucide-react';
+import {
+  processImageWithScannerFilter,
+  loadImageFromFile,
+  ScannerFilterMode,
+} from '@/lib/image-scanner-filters';
 
 type ProcessingStep =
   | 'idle'
@@ -103,6 +110,9 @@ export default function NewReceiptPage() {
   const [organization, setOrganization] = useState<string>(activeOrg?.name || 'Mi Empresa Principal');
   const [notes, setNotes] = useState<string>('');
 
+  const [activeFilter, setActiveFilter] = useState<ScannerFilterMode>('magic_bw');
+  const originalFileRef = useRef<File | null>(null);
+
   const [isCameraModalOpen, setIsCameraModalOpen] = useState(false);
   const [step, setStep] = useState<ProcessingStep>('idle');
   const [progressPercent, setProgressPercent] = useState<number>(0);
@@ -110,20 +120,43 @@ export default function NewReceiptPage() {
   const [processedDocId, setProcessedDocId] = useState<string | null>(null);
   const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
 
+  const handleApplyScannerFilter = async (mode: ScannerFilterMode) => {
+    if (!originalFileRef.current) return;
+    setActiveFilter(mode);
+    try {
+      const img = await loadImageFromFile(originalFileRef.current);
+      const res = await processImageWithScannerFilter(img, mode);
+      setFile(res.file);
+      setFilePreview(res.dataUrl);
+    } catch (err) {
+      console.error('Error aplicando filtro de escáner:', err);
+    }
+  };
+
   // Manejo de archivo seleccionado o foto tomada con la cámara
-  const handleFileChange = (selectedFile: File) => {
+  const handleFileChange = async (selectedFile: File) => {
     setFile(selectedFile);
     setDuplicateWarning(null);
     setStep('uploaded');
     setProgressPercent(15);
-    setStatusMessage('Archivo / Fotografía cargada correctamente');
+    setStatusMessage('Documento cargado correctamente');
 
     if (selectedFile.type.startsWith('image/')) {
-      const reader = new FileReader();
-      reader.onload = (e) => setFilePreview(e.target?.result as string);
-      reader.readAsDataURL(selectedFile);
+      originalFileRef.current = selectedFile;
+      try {
+        const img = await loadImageFromFile(selectedFile);
+        const res = await processImageWithScannerFilter(img, 'magic_bw');
+        setFile(res.file);
+        setFilePreview(res.dataUrl);
+        setActiveFilter('magic_bw');
+      } catch {
+        const reader = new FileReader();
+        reader.onload = (e) => setFilePreview(e.target?.result as string);
+        reader.readAsDataURL(selectedFile);
+      }
     } else {
       setFilePreview(null);
+      originalFileRef.current = null;
     }
   };
 
@@ -373,6 +406,66 @@ export default function NewReceiptPage() {
                 </div>
               )}
             </div>
+
+            {/* Previsualización y Control de Filtro de Escáner */}
+            {file && filePreview && file.type.startsWith('image/') && (
+              <div className="p-3.5 rounded-xl border border-blue-200 dark:border-blue-900/60 bg-blue-50/30 dark:bg-blue-950/20 space-y-3">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                  <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                    <Sparkles className="h-4 w-4 text-blue-600" />
+                    <span>Filtro de Escáner Documental Activo:</span>
+                  </span>
+
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => handleApplyScannerFilter('magic_bw')}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all ${
+                        activeFilter === 'magic_bw'
+                          ? 'bg-blue-600 text-white shadow-sm'
+                          : 'bg-background border hover:bg-muted text-muted-foreground'
+                      }`}
+                    >
+                      <Sparkles className="h-3 w-3 text-amber-300" />
+                      <span>Térmico B&W (Recomendado)</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleApplyScannerFilter('enhanced_color')}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all ${
+                        activeFilter === 'enhanced_color'
+                          ? 'bg-blue-600 text-white shadow-sm'
+                          : 'bg-background border hover:bg-muted text-muted-foreground'
+                      }`}
+                    >
+                      <Palette className="h-3 w-3" />
+                      <span>Color</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleApplyScannerFilter('original')}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all ${
+                        activeFilter === 'original'
+                          ? 'bg-blue-600 text-white shadow-sm'
+                          : 'bg-background border hover:bg-muted text-muted-foreground'
+                      }`}
+                    >
+                      <span>Original</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="relative max-h-64 overflow-hidden rounded-lg border bg-slate-950/5 dark:bg-black/30 flex items-center justify-center p-2">
+                  <img
+                    src={filePreview}
+                    alt="Previsualización de boleta escaneada"
+                    className="max-h-60 object-contain rounded shadow-xs"
+                  />
+                </div>
+              </div>
+            )}
 
             {/* Configuración Inicial del Gasto */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">

@@ -19,7 +19,15 @@ import {
   Zap,
   AlertCircle,
   Sparkles,
+  Wand2,
+  Palette,
+  Image as ImageIcon,
 } from 'lucide-react';
+import {
+  processImageWithScannerFilter,
+  loadImageFromFile,
+  ScannerFilterMode,
+} from '@/lib/image-scanner-filters';
 
 interface CameraCaptureModalProps {
   isOpen: boolean;
@@ -34,6 +42,7 @@ export function CameraCaptureModal({
 }: CameraCaptureModalProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const rawCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [stream, setStream] = useState<MediaStream | null>(null);
@@ -42,6 +51,8 @@ export function CameraCaptureModal({
   const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [hasMultipleCameras, setHasMultipleCameras] = useState(false);
+  const [filterMode, setFilterMode] = useState<ScannerFilterMode>('magic_bw');
+  const [isProcessingFilter, setIsProcessingFilter] = useState(false);
 
   // Iniciar la cámara cuando el modal se abre
   const startCamera = useCallback(async (mode: 'environment' | 'user') => {
@@ -106,38 +117,41 @@ export function CameraCaptureModal({
     startCamera(nextMode);
   };
 
-  const handleTakePhoto = () => {
-    if (!videoRef.current || !canvasRef.current) return;
+  const applyFilterToCanvas = async (mode: ScannerFilterMode) => {
+    if (!rawCanvasRef.current) return;
+    setIsProcessingFilter(true);
+    setFilterMode(mode);
+    try {
+      const result = await processImageWithScannerFilter(rawCanvasRef.current, mode);
+      setCapturedPhotoUrl(result.dataUrl);
+      setCapturedFile(result.file);
+    } catch (err) {
+      console.error('Error aplicando filtro de escáner:', err);
+    } finally {
+      setIsProcessingFilter(false);
+    }
+  };
 
+  const handleTakePhoto = async () => {
+    if (!videoRef.current) return;
     const video = videoRef.current;
-    const canvas = canvasRef.current;
 
-    canvas.width = video.videoWidth || 1280;
-    canvas.height = video.videoHeight || 720;
-
-    const ctx = canvas.getContext('2d');
+    const rawCanvas = document.createElement('canvas');
+    rawCanvas.width = video.videoWidth || 1280;
+    rawCanvas.height = video.videoHeight || 720;
+    const ctx = rawCanvas.getContext('2d');
     if (!ctx) return;
+    ctx.drawImage(video, 0, 0, rawCanvas.width, rawCanvas.height);
+    rawCanvasRef.current = rawCanvas;
 
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-    canvas.toBlob(
-      (blob) => {
-        if (!blob) return;
-        const file = new File([blob], `boleta_camara_${Date.now()}.jpg`, {
-          type: 'image/jpeg',
-        });
-        const url = URL.createObjectURL(blob);
-        setCapturedPhotoUrl(url);
-        setCapturedFile(file);
-      },
-      'image/jpeg',
-      0.95
-    );
+    // Aplicar filtro de escáner térmico por defecto
+    await applyFilterToCanvas('magic_bw');
   };
 
   const handleRetake = () => {
     setCapturedPhotoUrl(null);
     setCapturedFile(null);
+    rawCanvasRef.current = null;
     startCamera(facingMode);
   };
 
@@ -149,9 +163,24 @@ export function CameraCaptureModal({
   };
 
   // Manejo de captura nativa como fallback en móviles
-  const handleNativeFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleNativeFileInput = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const selected = e.target.files[0];
+      try {
+        const img = await loadImageFromFile(selected);
+        const rawCanvas = document.createElement('canvas');
+        rawCanvas.width = img.width;
+        rawCanvas.height = img.height;
+        const ctx = rawCanvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0);
+          rawCanvasRef.current = rawCanvas;
+          await applyFilterToCanvas('magic_bw');
+          return;
+        }
+      } catch (err) {
+        console.warn('Fallback a archivo sin filtro:', err);
+      }
       onCapture(selected);
       onClose();
     }
@@ -163,11 +192,11 @@ export function CameraCaptureModal({
         <DialogHeader className="p-4 bg-slate-900/80 border-b border-slate-800 flex flex-row items-center justify-between">
           <div>
             <DialogTitle className="text-sm font-bold flex items-center gap-2 text-white">
-              <Camera className="h-4 w-4 text-blue-400" />
-              <span>Cámara para Boletas</span>
+              <Sparkles className="h-4 w-4 text-blue-400" />
+              <span>Escáner Inteligente de Boletas</span>
             </DialogTitle>
             <DialogDescription className="text-[11px] text-slate-400">
-              Enfoca la boleta completa asegurando buena iluminación.
+              Captura y optimiza automáticamente documentos y papel térmico.
             </DialogDescription>
           </div>
           <Badge variant="outline" className="bg-blue-950/60 text-blue-300 border-blue-800 text-[10px]">
@@ -178,11 +207,19 @@ export function CameraCaptureModal({
         {/* Visor de Cámara o Foto Capturada */}
         <div className="relative aspect-[3/4] sm:aspect-[4/3] bg-black flex items-center justify-center overflow-hidden">
           {capturedPhotoUrl ? (
-            <img
-              src={capturedPhotoUrl}
-              alt="Foto capturada"
-              className="w-full h-full object-contain"
-            />
+            <div className="relative w-full h-full flex items-center justify-center bg-slate-950">
+              <img
+                src={capturedPhotoUrl}
+                alt="Documento escaneado"
+                className="w-full h-full object-contain"
+              />
+              {isProcessingFilter && (
+                <div className="absolute inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center text-xs font-semibold gap-2">
+                  <Sparkles className="h-4 w-4 text-blue-400 animate-spin" />
+                  <span>Procesando escaneo...</span>
+                </div>
+              )}
+            </div>
           ) : cameraError ? (
             <div className="p-6 text-center space-y-4 max-w-xs">
               <div className="h-12 w-12 rounded-full bg-amber-500/20 text-amber-400 mx-auto flex items-center justify-center">
@@ -207,14 +244,26 @@ export function CameraCaptureModal({
                 className="w-full h-full object-cover"
               />
 
-              {/* Guía visual de encuadre para boletas */}
-              <div className="absolute inset-8 border-2 border-dashed border-white/40 rounded-xl pointer-events-none flex flex-col justify-between p-3">
-                <div className="flex justify-between text-[10px] text-white/60 font-mono font-semibold">
-                  <span>ENCUADRE BOLETA</span>
-                  <span>100% VISIBLE</span>
+              {/* Guía visual de escáner documental para boletas */}
+              <div className="absolute inset-6 border border-white/20 rounded-2xl pointer-events-none flex flex-col justify-between p-3">
+                {/* 4 esquinas de escáner */}
+                <div className="absolute top-0 left-0 w-6 h-6 border-t-2 border-l-2 border-blue-400 rounded-tl-xl" />
+                <div className="absolute top-0 right-0 w-6 h-6 border-t-2 border-r-2 border-blue-400 rounded-tr-xl" />
+                <div className="absolute bottom-0 left-0 w-6 h-6 border-b-2 border-l-2 border-blue-400 rounded-bl-xl" />
+                <div className="absolute bottom-0 right-0 w-6 h-6 border-b-2 border-r-2 border-blue-400 rounded-br-xl" />
+
+                <div className="flex justify-between items-center text-[10px] text-blue-300 font-mono font-bold">
+                  <span className="bg-blue-950/80 px-2 py-0.5 rounded border border-blue-800/60 flex items-center gap-1">
+                    <Sparkles className="h-3 w-3 text-blue-400" />
+                    MODO ESCÁNER
+                  </span>
+                  <span className="bg-slate-900/80 px-2 py-0.5 rounded border border-slate-700 text-slate-300">
+                    ENFOQUE ACTIVO
+                  </span>
                 </div>
-                <div className="text-center text-[10px] text-white/70 bg-black/40 py-1 rounded backdrop-blur-sm">
-                  Alinea los bordes de la boleta dentro de este marco
+
+                <div className="text-center text-[11px] font-medium text-white bg-slate-950/80 px-3 py-1.5 rounded-lg border border-slate-800/80 backdrop-blur-md self-center shadow-lg">
+                  Ubica la boleta o voucher dentro de los bordes
                 </div>
               </div>
             </>
@@ -232,6 +281,56 @@ export function CameraCaptureModal({
             onChange={handleNativeFileInput}
           />
         </div>
+
+        {/* Selector de Filtros de Escáner Post-Captura */}
+        {capturedPhotoUrl && (
+          <div className="bg-slate-900 px-3 py-2 border-t border-slate-800 flex items-center justify-between gap-2">
+            <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider flex items-center gap-1 flex-shrink-0">
+              <Wand2 className="h-3 w-3 text-blue-400" />
+              Modo Escáner:
+            </span>
+            <div className="flex items-center gap-1.5 flex-1 justify-end">
+              <button
+                type="button"
+                onClick={() => applyFilterToCanvas('magic_bw')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all ${
+                  filterMode === 'magic_bw'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                }`}
+              >
+                <Sparkles className="h-3 w-3 text-amber-300" />
+                <span>Térmico B&W</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => applyFilterToCanvas('enhanced_color')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all ${
+                  filterMode === 'enhanced_color'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                }`}
+              >
+                <Palette className="h-3 w-3" />
+                <span>Color</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => applyFilterToCanvas('original')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all ${
+                  filterMode === 'original'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                }`}
+              >
+                <ImageIcon className="h-3 w-3" />
+                <span>Original</span>
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Botonera de Control */}
         <div className="p-4 bg-slate-900 border-t border-slate-800 flex items-center justify-between">
