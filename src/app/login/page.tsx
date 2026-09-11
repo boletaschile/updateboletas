@@ -1,0 +1,174 @@
+'use client';
+
+import React, { useState } from 'react';
+import Link from 'next/link';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { useAuth } from '@/lib/store/auth-context';
+import { Receipt, Mail, Lock, ArrowRight, Loader2, ShieldCheck, UserCheck, CheckCircle2 } from 'lucide-react';
+
+export default function LoginPage() {
+  const { login, isLoading } = useAuth();
+
+  const [email, setEmail] = useState('contacto@estudiocreativo.cl');
+  const [password, setPassword] = useState('123456');
+  const [errorMessage, setErrorMessage] = useState('');
+  const [isSuccess, setIsSuccess] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage('');
+    if (!email.trim()) return;
+
+    try {
+      setIsSuccess(true);
+      await login(email, password);
+      window.location.href = '/';
+    } catch (err: any) {
+      setIsSuccess(false);
+      setErrorMessage('Ocurrió un error al iniciar sesión. Verifica tus datos.');
+    }
+  };
+
+  const handleQuickDemoLogin = async () => {
+    setIsSuccess(true);
+    await login('contacto@estudiocreativo.cl', '123456');
+    window.location.href = '/';
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-slate-950 p-4 text-white">
+      <div className="w-full max-w-md space-y-6">
+        {/* Brand */}
+        <div className="text-center space-y-2">
+          <div className="h-14 w-14 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white font-bold shadow-lg shadow-blue-500/30 mx-auto">
+            <Receipt className="h-7 w-7" />
+          </div>
+          <h1 className="text-2xl font-extrabold tracking-tight">
+            Boletas<span className="text-blue-500">Chile</span>
+          </h1>
+          <p className="text-xs text-slate-400">
+            Control contable inteligente de boletas, facturas y gastos con IA
+          </p>
+        </div>
+
+        {/* Formulario */}
+        <Card className="bg-slate-900 border-slate-800 text-white shadow-2xl">
+          <CardHeader className="space-y-1 pb-4">
+            <CardTitle className="text-lg text-white">Iniciar Sesión</CardTitle>
+            <CardDescription className="text-xs text-slate-400">
+              Ingresa con tu correo o usa el acceso rápido de demostración.
+            </CardDescription>
+          </CardHeader>
+
+          <CardContent className="space-y-4">
+            {/* Botón de Acceso Rápido Demo (1 Clic) */}
+            <Button
+              type="button"
+              disabled={isSuccess || isLoading}
+              onClick={handleQuickDemoLogin}
+              className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-semibold text-xs h-11 gap-2 shadow-md active:scale-95 transition-all"
+            >
+              {isSuccess ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>Ingresando al sistema...</span>
+                </>
+              ) : (
+                <>
+                  <UserCheck className="h-4 w-4" />
+                  <span>Entrar con Usuario Demo (1 Clic)</span>
+                </>
+              )}
+            </Button>
+
+            <div className="relative flex py-1 items-center">
+              <div className="flex-grow border-t border-slate-800"></div>
+              <span className="flex-shrink mx-3 text-[10px] text-slate-500 uppercase font-semibold">o con tu correo</span>
+              <div className="flex-grow border-t border-slate-800"></div>
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-3.5">
+              <div className="space-y-1.5">
+                <Label className="text-xs text-slate-300">Correo Electrónico</Label>
+                <div className="relative">
+                  <Mail className="h-4 w-4 absolute left-3 top-3 text-slate-500" />
+                  <Input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="tu.correo@empresa.cl"
+                    required
+                    className="pl-9 bg-slate-950 border-slate-800 text-white text-xs h-10"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs text-slate-300">Contraseña</Label>
+                  <span className="text-[10px] text-slate-500">(Cualquier clave)</span>
+                </div>
+                <div className="relative">
+                  <Lock className="h-4 w-4 absolute left-3 top-3 text-slate-500" />
+                  <Input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    required
+                    className="pl-9 bg-slate-950 border-slate-800 text-white text-xs h-10"
+                  />
+                </div>
+              </div>
+
+              {errorMessage && (
+                <p className="text-xs text-red-400 bg-red-950/40 p-2.5 rounded-lg border border-red-900/50">
+                  {errorMessage}
+                </p>
+              )}
+
+              <Button
+                type="submit"
+                disabled={isLoading || isSuccess}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs h-10 gap-2 shadow-md active:scale-95 transition-all"
+              >
+                {isLoading || isSuccess ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Iniciando sesión...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Ingresar al Sistema</span>
+                    <ArrowRight className="h-4 w-4" />
+                  </>
+                )}
+              </Button>
+            </form>
+          </CardContent>
+
+          <CardFooter className="bg-slate-950/60 border-t border-slate-800/80 p-4 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-400 gap-2">
+            <div>
+              <span>¿No tienes cuenta? </span>
+              <Link href="/register" className="text-blue-400 font-semibold hover:underline">
+                Regístrate aquí
+              </Link>
+            </div>
+            <Link href="/" className="text-[11px] text-slate-400 hover:text-white underline">
+              Volver al inicio
+            </Link>
+          </CardFooter>
+        </Card>
+
+        {/* Seguridad */}
+        <div className="flex items-center justify-center gap-2 text-[11px] text-slate-500">
+          <ShieldCheck className="h-4 w-4 text-emerald-500" />
+          <span>Acceso seguro con aislamiento multi-empresa</span>
+        </div>
+      </div>
+    </div>
+  );
+}
