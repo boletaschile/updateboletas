@@ -117,6 +117,10 @@ export interface ExpenseDocument {
   ai_raw_response?: Record<string, any> | null;
   warnings?: string[] | null;
 
+  purchase_summary?: string | null;
+  detected_items_reference?: string[] | null;
+  category_name?: string | null;
+
   file_url?: string | null;
   file_name?: string | null;
   mime_type?: string | null;

@@ -54,6 +54,8 @@ export default function ReceiptDetailPage() {
   const [documentTime, setDocumentTime] = useState('');
   const [totalAmount, setTotalAmount] = useState<number>(0);
   const [paymentMethod, setPaymentMethod] = useState('');
+  const [purchaseSummary, setPurchaseSummary] = useState('');
+  const [categoryName, setCategoryName] = useState('');
   const [notes, setNotes] = useState('');
   const [zoomLevel, setZoomLevel] = useState(1);
   const [rotation, setRotation] = useState(0);
@@ -67,6 +69,8 @@ export default function ReceiptDetailPage() {
       setDocumentTime(doc.document_time || '');
       setTotalAmount(doc.total_amount || 0);
       setPaymentMethod(doc.payment_method || '');
+      setPurchaseSummary(doc.purchase_summary || doc.items?.[0]?.original_name || `Compra en ${doc.merchant_name || 'Comercio'}`);
+      setCategoryName(doc.category_name || doc.items?.[0]?.category_name || 'Insumos de oficina');
       setNotes(doc.notes || '');
     }
   }, [doc]);
@@ -90,6 +94,16 @@ export default function ReceiptDetailPage() {
   const isRutValid = merchantRut ? validateRUT(merchantRut) : true;
 
   const handleSaveChanges = () => {
+    // Si solo hay un ítem consolidado, actualizarlo con la glosa y el total
+    if (items.length === 1) {
+      updateReceiptItem(doc.id, items[0].id, {
+        original_name: purchaseSummary,
+        category_name: categoryName,
+        unit_price: totalAmount,
+        line_total: totalAmount,
+      });
+    }
+
     updateReceipt(doc.id, {
       merchant_name: merchantName,
       merchant_rut: merchantRut,
@@ -97,7 +111,11 @@ export default function ReceiptDetailPage() {
       document_date: documentDate,
       document_time: documentTime,
       total_amount: totalAmount,
+      net_amount: Math.round(totalAmount / 1.19),
+      tax_amount: totalAmount - Math.round(totalAmount / 1.19),
       payment_method: paymentMethod,
+      purchase_summary: purchaseSummary,
+      category_name: categoryName,
       notes: notes,
     });
     alert('Cambios guardados correctamente.');
@@ -331,6 +349,77 @@ export default function ReceiptDetailPage() {
                     onChange={(e) => setTotalAmount(parseInt(e.target.value) || 0)}
                   />
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* Referencia y Glosa de la Compra */}
+            <Card className="border-indigo-100 dark:border-indigo-950 bg-gradient-to-br from-indigo-50/40 via-background to-blue-50/30 dark:from-indigo-950/20 dark:to-blue-950/20">
+              <CardHeader className="py-4 border-b">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+                    <CardTitle className="text-sm">Referencia y Glosa de la Compra</CardTitle>
+                  </div>
+                  <Badge variant="outline" className="text-[11px] bg-background">
+                    Rendición Directa
+                  </Badge>
+                </div>
+                <CardDescription className="text-xs">
+                  Descripción representativa de la compra y categoría contable asignada.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="p-5 space-y-4 text-xs">
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold">Glosa / Descripción de la Compra</Label>
+                  <Input
+                    value={purchaseSummary}
+                    onChange={(e) => setPurchaseSummary(e.target.value)}
+                    placeholder="Ej: Almuerzo de trabajo 2 personas, Combustible Copec, Útiles de oficina..."
+                    className="font-medium bg-background text-sm h-10"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold">Categoría Asignada</Label>
+                    <select
+                      value={categoryName}
+                      onChange={(e) => setCategoryName(e.target.value)}
+                      className="w-full h-9 px-3 rounded-lg border border-input bg-background text-xs focus:ring-2 focus:ring-blue-500"
+                    >
+                      {categories.map((c) => (
+                        <option key={c.id} value={c.name}>
+                          {c.name} ({c.type === 'business' ? 'Empresa' : c.type === 'personal' ? 'Personal' : 'Ambos'})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold">Desglose Tributario (IVA 19%)</Label>
+                    <div className="h-9 px-3 rounded-lg bg-background border flex items-center justify-between text-xs text-muted-foreground">
+                      <span>Neto: <strong className="text-foreground">{formatCLP(Math.round(totalAmount / 1.19))}</strong></span>
+                      <span>IVA: <strong className="text-foreground">{formatCLP(totalAmount - Math.round(totalAmount / 1.19))}</strong></span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Conceptos / Productos detectados como referencia */}
+                {doc.detected_items_reference && doc.detected_items_reference.length > 0 && (
+                  <div className="space-y-1.5 pt-1">
+                    <Label className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+                      <Layers className="h-3 w-3" />
+                      <span>Conceptos detectados en la boleta (referencia visual):</span>
+                    </Label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {doc.detected_items_reference.map((ref, idx) => (
+                        <Badge key={idx} variant="secondary" className="text-[11px] font-normal py-0.5 px-2">
+                          {ref}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
 

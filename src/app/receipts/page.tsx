@@ -229,6 +229,11 @@ export default function ReceiptsListPage() {
                         </td>
                         <td className="px-4 py-3 font-semibold text-foreground">
                           {r.merchant_name}
+                          {r.purchase_summary && (
+                            <span className="text-[11px] text-blue-600 dark:text-blue-400 font-normal block truncate max-w-xs">
+                              {r.purchase_summary}
+                            </span>
+                          )}
                           {r.merchant_rut && (
                             <span className="text-[10px] text-muted-foreground block font-mono">
                               RUT: {r.merchant_rut}
