@@ -13,10 +13,12 @@ export async function analyzeReceiptWithAI(params: {
 }): Promise<AIReceiptAnalysisResponse> {
   const apiKey = process.env.OPENAI_API_KEY;
 
+  let apiError: string | undefined;
+
   // Si tenemos API Key de OpenAI configurada, invocamos el modelo
   if (apiKey && apiKey.trim() !== '' && apiKey !== 'your-openai-api-key') {
     try {
-      const openai = new OpenAI({ apiKey });
+      const openai = new OpenAI({ apiKey: apiKey.trim() });
       const model = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 
       const messages: any[] = [
@@ -35,11 +37,16 @@ export async function analyzeReceiptWithAI(params: {
         });
       }
 
-      if (params.imageBase64 && params.mimeType) {
+      if (params.imageBase64) {
+        let validMime = params.mimeType || 'image/jpeg';
+        if (!validMime.startsWith('image/')) validMime = 'image/jpeg';
+        // OpenAI Vision no soporta directamente heic sin convertir a jpeg/png
+        if (validMime.includes('heic') || validMime.includes('octet-stream')) validMime = 'image/jpeg';
+
         userContent.push({
           type: 'image_url',
           image_url: {
-            url: `data:${params.mimeType};base64,${params.imageBase64}`,
+            url: `data:${validMime};base64,${params.imageBase64}`,
             detail: 'high',
           },
         });
@@ -68,21 +75,25 @@ export async function analyzeReceiptWithAI(params: {
       }
     } catch (err: any) {
       console.error('Error llamando a OpenAI API:', err);
-      // Caída controlada al procesador heurístico
+      apiError = err?.message || String(err);
     }
   }
 
   // Fallback Inteligente / Simulación Determinista para desarrollo y pruebas
-  return generateDeterministicHeuristicAnalysis(params);
+  return generateDeterministicHeuristicAnalysis(params, apiKey, apiError);
 }
 
 /**
  * Parser heurístico de respaldo adaptado a comprobantes chilenos
  */
-function generateDeterministicHeuristicAnalysis(params: {
-  ocrText?: string;
-  defaultExpenseType?: 'business' | 'personal' | 'mixed';
-}): AIReceiptAnalysisResponse {
+function generateDeterministicHeuristicAnalysis(
+  params: {
+    ocrText?: string;
+    defaultExpenseType?: 'business' | 'personal' | 'mixed';
+  },
+  apiKey?: string,
+  apiError?: string
+): AIReceiptAnalysisResponse {
   const text = params.ocrText || '';
   const expenseType = params.defaultExpenseType || 'personal';
 
@@ -148,7 +159,11 @@ function generateDeterministicHeuristicAnalysis(params: {
       },
     ],
     warnings: [
-      '⚠️ MODO SIMULACIÓN ACTIVO: No se ha detectado OPENAI_API_KEY en Vercel. Para que la IA (GPT-4o-mini Vision) lea automáticamente los productos, el RUT y el total real de tu fotografía, ingresa tu API Key en Vercel > Settings > Environment Variables.',
+      apiError
+        ? `⚠️ Error al invocar OpenAI: "${apiError}". Revisa el saldo o cuota de tu cuenta OpenAI.`
+        : !apiKey || apiKey.trim() === '' || apiKey === 'your-openai-api-key'
+        ? '⚠️ No se detectó la variable OPENAI_API_KEY en Vercel para este proyecto. Verifica que esté en "boletaschile-updateboletas" con entorno "Production" marcado y vuelve a hacer Redeploy.'
+        : 'Datos analizados con procesador de contingencia.',
       'Por favor revise y confirme los datos antes de aprobar el gasto.',
     ],
     requires_review: true,

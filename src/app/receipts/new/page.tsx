@@ -36,6 +36,59 @@ type ProcessingStep =
   | 'ready'
   | 'error';
 
+// Comprime fotos de celular (de 8MB a ~300KB) para subida instantánea en 4G/5G y compatibilidad Vercel
+async function compressImageForUpload(file: File): Promise<File> {
+  if (!file.type.startsWith('image/')) return file;
+
+  return new Promise((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const maxDim = 1800;
+      let { width, height } = img;
+
+      if (width > maxDim || height > maxDim) {
+        if (width > height) {
+          height = Math.round((height * maxDim) / width);
+          width = maxDim;
+        } else {
+          width = Math.round((width * maxDim) / height);
+          height = maxDim;
+        }
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        resolve(file);
+        return;
+      }
+      ctx.drawImage(img, 0, 0, width, height);
+
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) {
+            resolve(file);
+            return;
+          }
+          const compressed = new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), {
+            type: 'image/jpeg',
+            lastModified: Date.now(),
+          });
+          resolve(compressed);
+        },
+        'image/jpeg',
+        0.85
+      );
+    };
+    img.onerror = () => resolve(file);
+    img.src = url;
+  });
+}
+
 export default function NewReceiptPage() {
   const router = useRouter();
   const { addReceipt, receipts } = useReceipts();
@@ -87,13 +140,17 @@ export default function NewReceiptPage() {
     try {
       setStep('processing_image');
       setProgressPercent(35);
-      setStatusMessage('Optimizando y corrigiendo orientación de la imagen...');
-      await new Promise((r) => setTimeout(r, 600));
+      setStatusMessage('Optimizando y reduciendo peso de la fotografía...');
+      
+      let uploadFile = file;
+      if (file.type.startsWith('image/')) {
+        uploadFile = await compressImageForUpload(file);
+      }
 
       setStep('extracting_ocr');
       setProgressPercent(60);
       setStatusMessage('Extrayendo texto con OCR y buscando datos tributarios...');
-      await new Promise((r) => setTimeout(r, 800));
+      await new Promise((r) => setTimeout(r, 400));
 
       setStep('interpreting_ai');
       setProgressPercent(85);
@@ -101,7 +158,7 @@ export default function NewReceiptPage() {
 
       // Llamada al endpoint de procesamiento o OCR service
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append('file', uploadFile);
       formData.append('expense_type', expenseType);
       formData.append('notes', notes);
 
