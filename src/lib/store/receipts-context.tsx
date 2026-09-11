@@ -26,6 +26,7 @@ interface ReceiptsContextType {
   deleteDebt: (id: string) => void;
   updateDebt: (id: string, fields: Partial<AccountPayable>) => void;
   resetToDemo: () => void;
+  clearAllData: () => void;
 }
 
 const ReceiptsContext = createContext<ReceiptsContextType | undefined>(undefined);
@@ -377,6 +378,13 @@ export function ReceiptsProvider({ children }: { children: React.ReactNode }) {
     localStorage.removeItem(STORAGE_KEY_DEBTS);
   };
 
+  const clearAllData = () => {
+    setReceipts([]);
+    setDebts([]);
+    localStorage.setItem(STORAGE_KEY_RECEIPTS, JSON.stringify([]));
+    localStorage.setItem(STORAGE_KEY_DEBTS, JSON.stringify([]));
+  };
+
   return (
     <ReceiptsContext.Provider
       value={{
@@ -399,6 +407,7 @@ export function ReceiptsProvider({ children }: { children: React.ReactNode }) {
         deleteDebt,
         updateDebt,
         resetToDemo,
+        clearAllData,
       }}
     >
       {children}

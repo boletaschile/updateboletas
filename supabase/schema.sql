@@ -141,6 +141,8 @@ CREATE TABLE IF NOT EXISTS public.expense_documents (
     requires_human_review BOOLEAN NOT NULL DEFAULT TRUE,
     
     -- Notas y metadatos
+    purchase_summary TEXT,
+    detected_items_reference JSONB DEFAULT '[]'::jsonb,
     notes TEXT,
     raw_ocr_text TEXT,
     ai_raw_response JSONB,
@@ -253,6 +255,14 @@ CREATE TABLE IF NOT EXISTS public.account_payables (
     payment_method TEXT,
     is_recurring BOOLEAN NOT NULL DEFAULT FALSE,
     recurring_frequency TEXT CHECK (recurring_frequency IN ('monthly', 'quarterly', 'annual')),
+    
+    -- Créditos y Préstamos en Cuotas
+    is_installment_credit BOOLEAN DEFAULT FALSE,
+    installment_current INT,
+    installment_total INT,
+    installment_amount BIGINT,
+    total_credit_amount BIGINT,
+    
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
