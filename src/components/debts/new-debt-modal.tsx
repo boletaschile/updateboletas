@@ -12,10 +12,11 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
 import { useReceipts } from '@/lib/store/receipts-context';
-import { validateRUT, formatRUT, parseCLP } from '@/lib/utils';
+import { validateRUT, formatRUT, parseCLP, formatCLP } from '@/lib/utils';
 import { DebtCategory } from '@/types';
-import { Calendar, Plus, Clock, AlertTriangle, Building2, User } from 'lucide-react';
+import { Calendar, Plus, Clock, AlertTriangle, Building2, User, CreditCard } from 'lucide-react';
 
 interface NewDebtModalProps {
   isOpen: boolean;
@@ -35,29 +36,70 @@ export function NewDebtModal({ isOpen, onClose }: NewDebtModalProps) {
   const [reminderDays, setReminderDays] = useState<number>(3);
   const [expenseType, setExpenseType] = useState<'business' | 'personal'>('business');
   const [isRecurring, setIsRecurring] = useState(false);
+  const [isInstallment, setIsInstallment] = useState(false);
+  const [installmentCurrent, setInstallmentCurrent] = useState<number>(1);
+  const [installmentTotal, setInstallmentTotal] = useState<number>(12);
+  const [installmentAmount, setInstallmentAmount] = useState<number>(150000);
+  const [totalCreditAmount, setTotalCreditAmount] = useState<number>(1800000);
   const [notes, setNotes] = useState('');
 
   const isRutValid = supplierRut ? validateRUT(supplierRut) : true;
 
+  // Cuando cambia la categoría a crédito bancario, sugerir modo cuotas
+  const handleCategoryChange = (newCat: DebtCategory) => {
+    setCategory(newCat);
+    if (newCat === 'credito_bancario') {
+      setIsInstallment(true);
+      setAmount(installmentAmount);
+    }
+  };
+
+  const handleInstallmentAmountChange = (val: number) => {
+    setInstallmentAmount(val);
+    setAmount(val);
+    setTotalCreditAmount(val * installmentTotal);
+  };
+
+  const handleInstallmentTotalChange = (val: number) => {
+    setInstallmentTotal(val);
+    setTotalCreditAmount(installmentAmount * val);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!supplierName.trim() || !dueDate || !amount) return;
+    const finalAmount = isInstallment ? installmentAmount : amount;
+    if (!supplierName.trim() || !dueDate || !finalAmount) return;
+
+    const docNum = isInstallment
+      ? (documentNumber.trim() || `CTA-${installmentCurrent}/${installmentTotal}`)
+      : (documentNumber.trim() || null);
 
     addDebt({
       user_id: 'user-demo-1',
       supplier_name: supplierName.trim(),
       supplier_rut: supplierRut ? formatRUT(supplierRut) : null,
-      document_number: documentNumber.trim() || null,
-      document_type: category === 'impuesto_f29' || category === 'previred' ? 'impuesto' : category === 'credito_bancario' ? 'cuota_credito' : 'factura',
+      document_number: docNum,
+      document_type: isInstallment
+        ? 'cuota_credito'
+        : category === 'impuesto_f29' || category === 'previred'
+        ? 'impuesto'
+        : category === 'credito_bancario'
+        ? 'cuota_credito'
+        : 'factura',
       category,
-      amount,
+      amount: finalAmount,
       issue_date: issueDate || new Date().toISOString().split('T')[0],
       due_date: dueDate,
       reminder_days_before: reminderDays,
       expense_type: expenseType,
-      notes: notes.trim() || null,
+      notes: notes.trim() || (isInstallment ? `Cuota ${installmentCurrent} de ${installmentTotal}` : null),
       is_recurring: isRecurring,
       recurring_frequency: isRecurring ? 'monthly' : undefined,
+      is_installment_credit: isInstallment,
+      installment_current: isInstallment ? installmentCurrent : null,
+      installment_total: isInstallment ? installmentTotal : null,
+      installment_amount: isInstallment ? installmentAmount : null,
+      total_credit_amount: isInstallment ? totalCreditAmount : null,
     });
 
     setSupplierName('');
@@ -144,7 +186,7 @@ export function NewDebtModal({ isOpen, onClose }: NewDebtModalProps) {
               <Label className="text-xs font-semibold">Tipo de Compromiso</Label>
               <select
                 value={category}
-                onChange={(e) => setCategory(e.target.value as DebtCategory)}
+                onChange={(e) => handleCategoryChange(e.target.value as DebtCategory)}
                 className="h-10 w-full px-2.5 rounded-lg border border-input bg-background text-xs"
               >
                 <option value="factura_proveedor">Factura Proveedor</option>
@@ -159,26 +201,127 @@ export function NewDebtModal({ isOpen, onClose }: NewDebtModalProps) {
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-xs font-semibold">N° Factura / Folio</Label>
+              <Label className="text-xs font-semibold">
+                {isInstallment ? 'Identificador Crédito' : 'N° Factura / Folio'}
+              </Label>
               <Input
                 value={documentNumber}
                 onChange={(e) => setDocumentNumber(e.target.value)}
-                placeholder="Ej: F-10294"
+                placeholder={isInstallment ? `CTA-${installmentCurrent}/${installmentTotal}` : 'Ej: F-10294'}
                 className="text-xs font-mono"
               />
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-xs font-semibold">Monto a Pagar (CLP)</Label>
+              <Label className="text-xs font-semibold">
+                {isInstallment ? 'Valor Cuota (CLP)' : 'Monto a Pagar (CLP)'}
+              </Label>
               <Input
                 type="number"
-                value={amount}
-                onChange={(e) => setAmount(parseInt(e.target.value) || 0)}
+                value={isInstallment ? installmentAmount : amount}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value) || 0;
+                  if (isInstallment) {
+                    handleInstallmentAmountChange(val);
+                  } else {
+                    setAmount(val);
+                  }
+                }}
                 placeholder="100000"
                 required
                 className="text-xs font-bold"
               />
             </div>
+          </div>
+
+          {/* Opción Crédito en Cuotas */}
+          <div className="p-3 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50/40 dark:bg-blue-950/20 space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={isInstallment}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setIsInstallment(checked);
+                    if (checked) {
+                      setCategory('credito_bancario');
+                      setAmount(installmentAmount);
+                      setTotalCreditAmount(installmentAmount * installmentTotal);
+                    }
+                  }}
+                  className="rounded border-input text-blue-600 focus:ring-blue-500 h-4 w-4"
+                />
+                <span className="text-xs font-bold text-blue-900 dark:text-blue-200 flex items-center gap-1.5">
+                  <CreditCard className="h-4 w-4 text-blue-600" />
+                  ¿Es un Crédito o Préstamo en Cuotas?
+                </span>
+              </label>
+              {isInstallment && (
+                <Badge variant="outline" className="text-[10px] bg-background text-blue-700 dark:text-blue-300 font-semibold">
+                  Cuota {installmentCurrent} de {installmentTotal}
+                </Badge>
+              )}
+            </div>
+
+            {isInstallment && (
+              <div className="space-y-3 pt-1 border-t border-blue-100 dark:border-blue-900">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  <div className="space-y-1">
+                    <Label className="text-[11px] font-semibold text-foreground">N° Cuota Actual</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={installmentTotal}
+                      value={installmentCurrent}
+                      onChange={(e) => setInstallmentCurrent(parseInt(e.target.value) || 1)}
+                      className="text-xs h-9 bg-background"
+                      placeholder="Ej: 1"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label className="text-[11px] font-semibold text-foreground">Total de Cuotas</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      value={installmentTotal}
+                      onChange={(e) => handleInstallmentTotalChange(parseInt(e.target.value) || 1)}
+                      className="text-xs h-9 bg-background"
+                      placeholder="Ej: 24"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label className="text-[11px] font-semibold text-blue-700 dark:text-blue-300">
+                      Valor de la Cuota (CLP)
+                    </Label>
+                    <Input
+                      type="number"
+                      value={installmentAmount}
+                      onChange={(e) => handleInstallmentAmountChange(parseInt(e.target.value) || 0)}
+                      className="text-xs h-9 font-bold bg-background text-blue-700 dark:text-blue-300"
+                      placeholder="150000"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                  <div className="p-2 rounded-lg bg-background/80 border text-[11px] flex justify-between items-center">
+                    <span className="text-muted-foreground">Monto Total del Crédito:</span>
+                    <strong className="text-foreground">{formatCLP(totalCreditAmount)}</strong>
+                  </div>
+
+                  <div className="p-2 rounded-lg bg-background/80 border text-[11px] flex justify-between items-center">
+                    <span className="text-muted-foreground">Saldo Restante Estimado:</span>
+                    <strong className="text-blue-600 dark:text-blue-400">
+                      {formatCLP(installmentAmount * Math.max(0, installmentTotal - installmentCurrent + 1))}
+                    </strong>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-xl bg-muted/40 border">

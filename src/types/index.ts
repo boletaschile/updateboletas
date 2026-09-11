@@ -187,6 +187,14 @@ export interface AccountPayable {
   payment_method?: string | null;
   is_recurring?: boolean;
   recurring_frequency?: 'monthly' | 'quarterly' | 'annual';
+
+  // Créditos y Préstamos en Cuotas
+  is_installment_credit?: boolean;
+  installment_current?: number | null; // N° de cuota actual (ej: 4)
+  installment_total?: number | null; // Total de cuotas pactadas (ej: 24)
+  installment_amount?: number | null; // Valor de la cuota mensual en CLP
+  total_credit_amount?: number | null; // Monto total o saldo del crédito en CLP
+
   created_at: string;
   updated_at: string;
 }

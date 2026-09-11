@@ -104,7 +104,12 @@ export default function CuentasPorPagarPage() {
           ? d.status !== 'paid'
           : d.status === filterStatus;
 
-      const matchType = filterType === 'all' || d.expense_type === filterType;
+      const matchType =
+        filterType === 'all'
+          ? true
+          : filterType === 'installments'
+          ? Boolean(d.is_installment_credit || d.category === 'credito_bancario')
+          : d.expense_type === filterType;
 
       return matchSearch && matchStatus && matchType;
     });
@@ -115,6 +120,10 @@ export default function CuentasPorPagarPage() {
   const overdueDebts = orgDebts.filter((d) => d.status === 'overdue');
   const dueSoonDebts = orgDebts.filter((d) => d.status === 'due_soon');
   const paidDebts = orgDebts.filter((d) => d.status === 'paid');
+
+  const installmentDebts = orgDebts.filter((d) => d.is_installment_credit || d.category === 'credito_bancario');
+  const activeInstallments = installmentDebts.filter((d) => d.status !== 'paid');
+  const totalInstallmentMonthly = activeInstallments.reduce((acc, d) => acc + (d.installment_amount || d.amount), 0);
 
   const totalPendingAmount = pendingDebts.reduce((acc, d) => acc + d.amount, 0);
   const totalOverdueAmount = overdueDebts.reduce((acc, d) => acc + d.amount, 0);
@@ -196,13 +205,26 @@ export default function CuentasPorPagarPage() {
         )}
 
         {/* KPIs de Cuentas por Pagar */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
           <Card className="p-4 border-l-4 border-l-slate-600">
             <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">
               Total Pendiente por Pagar
             </span>
-            <h3 className="text-2xl font-black text-foreground mt-1">{formatCLP(totalPendingAmount)}</h3>
+            <h3 className="text-xl font-black text-foreground mt-1">{formatCLP(totalPendingAmount)}</h3>
             <span className="text-[11px] text-muted-foreground">{pendingDebts.length} cuentas por liquidar</span>
+          </Card>
+
+          <Card className="p-4 border-l-4 border-l-blue-600 bg-blue-50/20 dark:bg-blue-950/20">
+            <span className="text-[10px] text-blue-700 dark:text-blue-300 uppercase font-bold tracking-wider flex items-center gap-1">
+              <CreditCard className="h-3.5 w-3.5" />
+              <span>Cuotas de Créditos</span>
+            </span>
+            <h3 className="text-xl font-black text-blue-700 dark:text-blue-300 mt-1">
+              {formatCLP(totalInstallmentMonthly)}
+            </h3>
+            <span className="text-[11px] text-blue-600 dark:text-blue-400 font-medium">
+              {activeInstallments.length} crédito(s) en cuotas activos
+            </span>
           </Card>
 
           <Card className="p-4 border-l-4 border-l-red-600 bg-red-50/20 dark:bg-red-950/20">
@@ -210,7 +232,7 @@ export default function CuentasPorPagarPage() {
               <AlertTriangle className="h-3.5 w-3.5" />
               <span>Deudas Vencidas (Mora)</span>
             </span>
-            <h3 className="text-2xl font-black text-red-700 dark:text-red-300 mt-1">
+            <h3 className="text-xl font-black text-red-700 dark:text-red-300 mt-1">
               {formatCLP(totalOverdueAmount)}
             </h3>
             <span className="text-[11px] text-red-600 font-medium">
@@ -223,7 +245,7 @@ export default function CuentasPorPagarPage() {
               <Clock className="h-3.5 w-3.5" />
               <span>Por Vencer en 5 Días</span>
             </span>
-            <h3 className="text-2xl font-black text-amber-700 dark:text-amber-300 mt-1">
+            <h3 className="text-xl font-black text-amber-700 dark:text-amber-300 mt-1">
               {formatCLP(totalDueSoonAmount)}
             </h3>
             <span className="text-[11px] text-amber-600 font-medium">
@@ -236,7 +258,7 @@ export default function CuentasPorPagarPage() {
               <CheckCircle2 className="h-3.5 w-3.5" />
               <span>Pagadas en el Mes</span>
             </span>
-            <h3 className="text-2xl font-black text-emerald-700 dark:text-emerald-300 mt-1">
+            <h3 className="text-xl font-black text-emerald-700 dark:text-emerald-300 mt-1">
               {formatCLP(totalPaidAmount)}
             </h3>
             <span className="text-[11px] text-emerald-600 font-medium">
@@ -279,6 +301,7 @@ export default function CuentasPorPagarPage() {
                 <option value="all">Empresa y Personal</option>
                 <option value="business">Solo Empresa</option>
                 <option value="personal">Solo Personal</option>
+                <option value="installments">💳 Solo Créditos en Cuotas ({installmentDebts.length})</option>
               </select>
 
               <Button
@@ -331,9 +354,31 @@ export default function CuentasPorPagarPage() {
                     return (
                       <tr key={debt.id} className="hover:bg-muted/30 transition-colors">
                         <td className="px-3 py-3 font-semibold text-foreground">
-                          {debt.supplier_name}
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span>{debt.supplier_name}</span>
+                            {debt.is_installment_credit && (
+                              <Badge variant="outline" className="text-[10px] bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800">
+                                Cuota {debt.installment_current || 1} de {debt.installment_total || 1}
+                              </Badge>
+                            )}
+                          </div>
+                          {debt.is_installment_credit && debt.installment_total && (
+                            <div className="mt-1 flex items-center gap-2 max-w-[170px]">
+                              <div className="flex-1 bg-muted rounded-full h-1.5 overflow-hidden">
+                                <div
+                                  className="bg-blue-600 h-full rounded-full transition-all"
+                                  style={{
+                                    width: `${Math.min(100, Math.round(((debt.installment_current || 1) / debt.installment_total) * 100))}%`,
+                                  }}
+                                />
+                              </div>
+                              <span className="text-[9px] text-muted-foreground font-mono">
+                                {Math.round(((debt.installment_current || 1) / debt.installment_total) * 100)}%
+                              </span>
+                            </div>
+                          )}
                           {debt.supplier_rut && (
-                            <span className="text-[10px] text-muted-foreground block font-mono">
+                            <span className="text-[10px] text-muted-foreground block font-mono mt-0.5">
                               RUT: {debt.supplier_rut}
                             </span>
                           )}
@@ -343,11 +388,23 @@ export default function CuentasPorPagarPage() {
                         </td>
                         <td className="px-3 py-3">
                           <Badge variant="outline" className="text-[10px] capitalize">
-                            {debt.category.replace(/_/g, ' ')}
+                            {debt.is_installment_credit ? 'Crédito en Cuotas' : debt.category.replace(/_/g, ' ')}
                           </Badge>
                         </td>
-                        <td className="px-3 py-3 text-right font-extrabold text-foreground">
-                          {formatCLP(debt.amount)}
+                        <td className="px-3 py-3 text-right">
+                          <span className="font-extrabold text-foreground block">
+                            {formatCLP(debt.installment_amount || debt.amount)}
+                          </span>
+                          {debt.is_installment_credit && (
+                            <span className="text-[10px] text-muted-foreground block">
+                              valor cuota
+                            </span>
+                          )}
+                          {debt.total_credit_amount && (
+                            <span className="text-[10px] text-blue-600 dark:text-blue-400 block font-semibold">
+                              Total: {formatCLP(debt.total_credit_amount)}
+                            </span>
+                          )}
                         </td>
                         <td className="px-3 py-3 font-medium whitespace-nowrap">
                           {formatDateCL(debt.due_date)}
