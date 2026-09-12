@@ -11,7 +11,8 @@ import {
   AccountReceivable,
   ReceivableStatus,
 } from '@/types';
-import { INITIAL_CATEGORIES, DEMO_BUDGETS } from './demo-data';
+import { INITIAL_CATEGORIES } from './demo-data';
+import { useAuth } from './auth-context';
 import { calculateTotalsBreakdown } from '@/lib/utils';
 
 interface ReceiptsContextType {
@@ -52,6 +53,41 @@ const STORAGE_KEY_BUDGETS = 'subeboletas_budgets_v1';
 const STORAGE_KEY_DEBTS = 'subeboletas_debts_v1';
 const STORAGE_KEY_RECEIVABLES = 'subeboletas_receivables_v1';
 
+// Firmas de datos demo para filtrado y purga automática en clientes móviles/antiguos
+const DEMO_RECEIPT_PREFIX = 'doc-demo-';
+const DEMO_MERCHANTS = new Set([
+  'Supermercados Lider Express',
+  'Sodimac Homecenter',
+  'Copec Pronto',
+  'Restaurante La Mar',
+  'Librería Antártica',
+  'Notaría y Conservador Sanhattan',
+]);
+
+const DEMO_DEBT_IDS = new Set([
+  'debt-1',
+  'debt-2',
+  'debt-3',
+  'debt-4',
+  'debt-5',
+  'debt-6',
+  'debt-7',
+  'debt-8',
+]);
+
+const DEMO_SUPPLIERS = new Set([
+  'Comercializadora e Importadora Papel SpA',
+  'Servicio de Impuestos Internos (SII)',
+  'Previred - Cotizaciones Previsionales',
+  'Banco de Chile - Cuota Crédito Fogape SpA',
+  'Entel Empresas Chile',
+  'Inmobiliaria Nueva Providencia SpA',
+  'Scotiabank Chile - Tarjeta Visa Infinite',
+  'Scotiabank - Crédito Consumo Personal',
+]);
+
+const DEMO_BUDGET_IDS = new Set(['b-1', 'b-2', 'b-3']);
+
 /**
  * Calcula el estado de vencimiento de cuentas por cobrar
  */
@@ -91,14 +127,17 @@ function computeDebtStatus(dueDate: string, isPaid?: boolean): DebtStatus {
 }
 
 export function ReceiptsProvider({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  const currentUserId = user?.id || 'user-active';
+
   const [receipts, setReceipts] = useState<ExpenseDocument[]>([]);
   const [categories, setCategories] = useState<Category[]>(INITIAL_CATEGORIES);
-  const [budgets, setBudgets] = useState<MonthlyBudget[]>(DEMO_BUDGETS);
+  const [budgets, setBudgets] = useState<MonthlyBudget[]>([]);
   const [debts, setDebts] = useState<AccountPayable[]>([]);
   const [receivables, setReceivables] = useState<AccountReceivable[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
 
-  // Cargar de LocalStorage si existe
+  // Cargar de LocalStorage si existe y purgar automáticamente residuos de datos demo
   useEffect(() => {
     try {
       const savedRecs = localStorage.getItem(STORAGE_KEY_RECEIPTS);
@@ -107,18 +146,43 @@ export function ReceiptsProvider({ children }: { children: React.ReactNode }) {
       const savedDebts = localStorage.getItem(STORAGE_KEY_DEBTS);
       const savedReceivables = localStorage.getItem(STORAGE_KEY_RECEIVABLES);
 
-      if (savedRecs) setReceipts(JSON.parse(savedRecs));
+      if (savedRecs) {
+        const parsed: ExpenseDocument[] = JSON.parse(savedRecs);
+        const cleanRecs = parsed.filter(
+          (r) => !r.id.startsWith(DEMO_RECEIPT_PREFIX) && !DEMO_MERCHANTS.has(r.merchant_name)
+        );
+        setReceipts(cleanRecs);
+        localStorage.setItem(STORAGE_KEY_RECEIPTS, JSON.stringify(cleanRecs));
+      } else {
+        setReceipts([]);
+      }
+
       if (savedCats) setCategories(JSON.parse(savedCats));
-      if (savedBuds) setBudgets(JSON.parse(savedBuds));
+
+      if (savedBuds) {
+        const parsedBuds: MonthlyBudget[] = JSON.parse(savedBuds);
+        const cleanBuds = parsedBuds.filter((b) => !DEMO_BUDGET_IDS.has(b.id));
+        setBudgets(cleanBuds);
+        localStorage.setItem(STORAGE_KEY_BUDGETS, JSON.stringify(cleanBuds));
+      } else {
+        setBudgets([]);
+      }
+
       if (savedDebts) {
         const parsedDebts: AccountPayable[] = JSON.parse(savedDebts);
-        setDebts(
-          parsedDebts.map((d) => ({
-            ...d,
-            status: computeDebtStatus(d.due_date, !!d.paid_at),
-          }))
+        const cleanDebts = parsedDebts.filter(
+          (d) => !DEMO_DEBT_IDS.has(d.id) && !DEMO_SUPPLIERS.has(d.supplier_name)
         );
+        const mappedDebts = cleanDebts.map((d) => ({
+          ...d,
+          status: computeDebtStatus(d.due_date, !!d.paid_at),
+        }));
+        setDebts(mappedDebts);
+        localStorage.setItem(STORAGE_KEY_DEBTS, JSON.stringify(mappedDebts));
+      } else {
+        setDebts([]);
       }
+
       if (savedReceivables) {
         const parsedReceivables: AccountReceivable[] = JSON.parse(savedReceivables);
         setReceivables(
@@ -127,6 +191,8 @@ export function ReceiptsProvider({ children }: { children: React.ReactNode }) {
             status: computeReceivableStatus(r.due_date, !!r.collected_at),
           }))
         );
+      } else {
+        setReceivables([]);
       }
     } catch (e) {
       console.warn('Error cargando datos de LocalStorage:', e);
@@ -179,7 +245,7 @@ export function ReceiptsProvider({ children }: { children: React.ReactNode }) {
 
     const doc: ExpenseDocument = {
       id: docId,
-      user_id: 'user-demo-1',
+      user_id: currentUserId,
       merchant_name: newDoc.merchant_name || 'Comercio por verificar',
       merchant_legal_name: newDoc.merchant_legal_name || null,
       merchant_rut: newDoc.merchant_rut || null,
@@ -371,7 +437,7 @@ export function ReceiptsProvider({ children }: { children: React.ReactNode }) {
     const created: AccountPayable = {
       ...newDebt,
       id: debtId,
-      user_id: 'user-demo-1',
+      user_id: currentUserId,
       status,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -439,7 +505,7 @@ export function ReceiptsProvider({ children }: { children: React.ReactNode }) {
     const created: AccountReceivable = {
       ...newRec,
       id: recId,
-      user_id: 'user-demo-1',
+      user_id: currentUserId,
       status,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -507,10 +573,11 @@ export function ReceiptsProvider({ children }: { children: React.ReactNode }) {
     setDebts([]);
     setReceivables([]);
     setCategories(INITIAL_CATEGORIES);
-    setBudgets(DEMO_BUDGETS);
+    setBudgets([]);
     localStorage.setItem(STORAGE_KEY_RECEIPTS, JSON.stringify([]));
     localStorage.setItem(STORAGE_KEY_DEBTS, JSON.stringify([]));
     localStorage.setItem(STORAGE_KEY_RECEIVABLES, JSON.stringify([]));
+    localStorage.setItem(STORAGE_KEY_BUDGETS, JSON.stringify([]));
   };
 
   return (

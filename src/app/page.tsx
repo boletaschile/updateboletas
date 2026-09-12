@@ -111,8 +111,8 @@ export default function DashboardPage() {
   const totalPersonal = receiptsPersonal + paidDebtsPersonal;
   const pendingReviewCount = currentMonthReceipts.filter((r) => r.status === 'needs_review').length;
 
-  const totalBudget = budgets.find((b) => b.budget_type === 'total')?.amount || 800000;
-  const budgetUsagePercent = Math.min(100, Math.round((totalSpent / totalBudget) * 100));
+  const totalBudget = budgets.find((b) => b.budget_type === 'total')?.amount || 0;
+  const budgetUsagePercent = totalBudget > 0 ? Math.min(100, Math.round((totalSpent / totalBudget) * 100)) : 0;
   const remainingBudget = Math.max(0, totalBudget - totalSpent);
 
   const overdueDebts = scopedDebts.filter((d) => d.status === 'overdue');
@@ -388,8 +388,12 @@ export default function DashboardPage() {
               </div>
             </div>
             <div className="flex items-baseline justify-between mt-2">
-              <h3 className="text-2xl font-extrabold text-foreground">{formatCLP(remainingBudget)}</h3>
-              <span className="text-xs text-muted-foreground">de {formatCLP(totalBudget)}</span>
+              <h3 className="text-2xl font-extrabold text-foreground">
+                {totalBudget > 0 ? formatCLP(remainingBudget) : 'Sin Asignar'}
+              </h3>
+              <span className="text-xs text-muted-foreground">
+                {totalBudget > 0 ? `de ${formatCLP(totalBudget)}` : '0 presupuestado'}
+              </span>
             </div>
             <div className="mt-3 space-y-1">
               <Progress
@@ -397,8 +401,8 @@ export default function DashboardPage() {
                 indicatorColor={budgetUsagePercent > 90 ? 'bg-red-500' : budgetUsagePercent > 75 ? 'bg-amber-500' : 'bg-blue-600'}
               />
               <div className="flex justify-between text-[10px] text-muted-foreground">
-                <span>{budgetUsagePercent}% consumido</span>
-                <span>Disponible</span>
+                <span>{totalBudget > 0 ? `${budgetUsagePercent}% consumido` : 'Sin límite mensual'}</span>
+                <span>{totalBudget > 0 ? 'Disponible' : 'Configurar'}</span>
               </div>
             </div>
           </Card>
