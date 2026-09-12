@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { ExpenseDocument, Organization, BankTransaction, AccountPayable } from '@/types';
+import { ExpenseDocument, Organization, BankTransaction, AccountPayable, AccountReceivable } from '@/types';
 import { formatDateCL, formatCLP } from './utils';
 
 /**
@@ -70,6 +70,92 @@ export function exportDebtsToExcel(
   XLSX.utils.book_append_sheet(wb, wsSummary, 'Resumen Financiero');
 
   const fileName = `Cuentas_por_Pagar_${new Date().toISOString().split('T')[0]}.xlsx`;
+  XLSX.writeFile(wb, fileName);
+}
+
+/**
+ * Exporta el reporte de Cuentas por Cobrar y Facturas de Venta a Excel
+ */
+export function exportReceivablesToExcel(
+  receivables: AccountReceivable[],
+  company?: Organization | null
+) {
+  const getDocTypeName = (docType: string) => {
+    switch (docType) {
+      case 'factura_afecta':
+        return 'Factura Afecta (19% IVA)';
+      case 'factura_exenta':
+        return 'Factura Exenta';
+      case 'boleta_honorarios':
+        return 'Boleta Honorarios';
+      case 'orden_compra':
+        return 'Orden de Compra';
+      case 'sin_facturar':
+        return 'Trabajo Sin Facturar';
+      default:
+        return docType;
+    }
+  };
+
+  const rows = receivables.map((r, idx) => ({
+    'N°': idx + 1,
+    'Cliente / Razón Social': r.client_name,
+    'RUT Cliente': r.client_rut || '-',
+    'Contacto': r.client_contact || '-',
+    'Glosa / Servicio': r.service_description,
+    'N° Factura / Folio': r.invoice_number || 'S/F',
+    'Tipo Documento': getDocTypeName(r.document_type),
+    'Monto Neto (CLP)': r.net_amount,
+    'IVA Débito / Retención (CLP)': r.tax_amount,
+    'Monto Total a Cobrar (CLP)': r.total_amount,
+    'Fecha Emisión': formatDateCL(r.issue_date),
+    'Fecha Límite Vencimiento': formatDateCL(r.due_date),
+    'Estado':
+      r.status === 'collected'
+        ? 'COBRADA'
+        : r.status === 'overdue'
+        ? 'VENCIDA (EN MORA)'
+        : r.status === 'due_soon'
+        ? 'POR VENCER PRONTO'
+        : 'PENDIENTE DE COBRO',
+    'Fecha Cobro': r.collected_at ? formatDateCL(r.collected_at) : '-',
+    'Monto Cobrado (CLP)': r.collected_amount || '-',
+    'Medio de Pago': r.payment_method || '-',
+    'Ámbito': r.income_type === 'business' ? 'Empresa' : 'Personal',
+    'Notas': r.notes || '',
+  }));
+
+  const pending = receivables.filter((r) => r.status !== 'collected');
+  const overdue = receivables.filter((r) => r.status === 'overdue');
+  const collected = receivables.filter((r) => r.status === 'collected');
+
+  const totalPendingAmount = pending.reduce((acc, r) => acc + r.total_amount, 0);
+  const totalPendingNeto = pending.reduce((acc, r) => acc + r.net_amount, 0);
+  const totalPendingIva = pending.reduce((acc, r) => acc + r.tax_amount, 0);
+  const totalOverdueAmount = overdue.reduce((acc, r) => acc + r.total_amount, 0);
+  const totalCollectedAmount = collected.reduce((acc, r) => acc + (r.collected_amount || r.total_amount), 0);
+
+  const summary = [
+    { 'Concepto': 'Empresa / Cuenta', 'Valor': company?.name || 'Estudio Creativo SpA' },
+    { 'Concepto': 'Fecha del Reporte', 'Valor': formatDateCL(new Date()) },
+    { 'Concepto': 'Total Facturas / Trabajos Registrados', 'Valor': receivables.length },
+    { 'Concepto': 'Facturas Pendientes por Cobrar', 'Valor': pending.length },
+    { 'Concepto': 'Facturas Vencidas en Alerta', 'Valor': overdue.length },
+    { 'Concepto': 'Monto Neto por Cobrar (CLP)', 'Valor': totalPendingNeto },
+    { 'Concepto': 'IVA Débito por Cobrar (CLP)', 'Valor': totalPendingIva },
+    { 'Concepto': 'Monto Total por Cobrar (CLP)', 'Valor': totalPendingAmount },
+    { 'Concepto': 'Monto Vencido en Mora (CLP)', 'Valor': totalOverdueAmount },
+    { 'Concepto': 'Total Cobrado y Percibido (CLP)', 'Valor': totalCollectedAmount },
+  ];
+
+  const wb = XLSX.utils.book_new();
+  const wsRows = XLSX.utils.json_to_sheet(rows);
+  const wsSummary = XLSX.utils.json_to_sheet(summary);
+
+  XLSX.utils.book_append_sheet(wb, wsRows, 'Cuentas por Cobrar');
+  XLSX.utils.book_append_sheet(wb, wsSummary, 'Resumen de Cobranzas');
+
+  const fileName = `Cuentas_por_Cobrar_${new Date().toISOString().split('T')[0]}.xlsx`;
   XLSX.writeFile(wb, fileName);
 }
 

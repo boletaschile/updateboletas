@@ -1,7 +1,16 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { ExpenseDocument, ExpenseItem, Category, MonthlyBudget, AccountPayable, DebtStatus } from '@/types';
+import {
+  ExpenseDocument,
+  ExpenseItem,
+  Category,
+  MonthlyBudget,
+  AccountPayable,
+  DebtStatus,
+  AccountReceivable,
+  ReceivableStatus,
+} from '@/types';
 import { INITIAL_CATEGORIES, DEMO_BUDGETS } from './demo-data';
 import { calculateTotalsBreakdown } from '@/lib/utils';
 
@@ -10,6 +19,7 @@ interface ReceiptsContextType {
   categories: Category[];
   budgets: MonthlyBudget[];
   debts: AccountPayable[];
+  receivables: AccountReceivable[];
   addReceipt: (newDoc: Partial<ExpenseDocument> & { items?: Partial<ExpenseItem>[] }) => ExpenseDocument;
   updateReceipt: (id: string, updatedFields: Partial<ExpenseDocument>) => void;
   deleteReceipt: (id: string) => void;
@@ -25,6 +35,11 @@ interface ReceiptsContextType {
   unmarkDebtAsPaid: (id: string) => void;
   deleteDebt: (id: string) => void;
   updateDebt: (id: string, fields: Partial<AccountPayable>) => void;
+  addReceivable: (newRec: Omit<AccountReceivable, 'id' | 'created_at' | 'updated_at' | 'status'>) => AccountReceivable;
+  markReceivableAsCollected: (id: string, paymentMethod?: string) => void;
+  unmarkReceivableAsCollected: (id: string) => void;
+  deleteReceivable: (id: string) => void;
+  updateReceivable: (id: string, fields: Partial<AccountReceivable>) => void;
   resetToDemo: () => void;
   clearAllData: () => void;
 }
@@ -35,6 +50,26 @@ const STORAGE_KEY_RECEIPTS = 'subeboletas_receipts_v1';
 const STORAGE_KEY_CATEGORIES = 'subeboletas_categories_v1';
 const STORAGE_KEY_BUDGETS = 'subeboletas_budgets_v1';
 const STORAGE_KEY_DEBTS = 'subeboletas_debts_v1';
+const STORAGE_KEY_RECEIVABLES = 'subeboletas_receivables_v1';
+
+/**
+ * Calcula el estado de vencimiento de cuentas por cobrar
+ */
+function computeReceivableStatus(dueDate: string, isCollected?: boolean): ReceivableStatus {
+  if (isCollected) return 'collected';
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const due = new Date(dueDate);
+  due.setHours(0, 0, 0, 0);
+
+  const diffTime = due.getTime() - today.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+  if (diffDays < 0) return 'overdue';
+  if (diffDays <= 5) return 'due_soon';
+  return 'pending';
+}
 
 /**
  * Calcula el estado de vencimiento según la fecha actual
@@ -60,6 +95,7 @@ export function ReceiptsProvider({ children }: { children: React.ReactNode }) {
   const [categories, setCategories] = useState<Category[]>(INITIAL_CATEGORIES);
   const [budgets, setBudgets] = useState<MonthlyBudget[]>(DEMO_BUDGETS);
   const [debts, setDebts] = useState<AccountPayable[]>([]);
+  const [receivables, setReceivables] = useState<AccountReceivable[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
 
   // Cargar de LocalStorage si existe
@@ -69,6 +105,7 @@ export function ReceiptsProvider({ children }: { children: React.ReactNode }) {
       const savedCats = localStorage.getItem(STORAGE_KEY_CATEGORIES);
       const savedBuds = localStorage.getItem(STORAGE_KEY_BUDGETS);
       const savedDebts = localStorage.getItem(STORAGE_KEY_DEBTS);
+      const savedReceivables = localStorage.getItem(STORAGE_KEY_RECEIVABLES);
 
       if (savedRecs) setReceipts(JSON.parse(savedRecs));
       if (savedCats) setCategories(JSON.parse(savedCats));
@@ -79,6 +116,15 @@ export function ReceiptsProvider({ children }: { children: React.ReactNode }) {
           parsedDebts.map((d) => ({
             ...d,
             status: computeDebtStatus(d.due_date, !!d.paid_at),
+          }))
+        );
+      }
+      if (savedReceivables) {
+        const parsedReceivables: AccountReceivable[] = JSON.parse(savedReceivables);
+        setReceivables(
+          parsedReceivables.map((r) => ({
+            ...r,
+            status: computeReceivableStatus(r.due_date, !!r.collected_at),
           }))
         );
       }
@@ -97,10 +143,11 @@ export function ReceiptsProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem(STORAGE_KEY_CATEGORIES, JSON.stringify(categories));
       localStorage.setItem(STORAGE_KEY_BUDGETS, JSON.stringify(budgets));
       localStorage.setItem(STORAGE_KEY_DEBTS, JSON.stringify(debts));
+      localStorage.setItem(STORAGE_KEY_RECEIVABLES, JSON.stringify(receivables));
     } catch (e) {
       console.warn('Error guardando en LocalStorage:', e);
     }
-  }, [receipts, categories, budgets, debts, isLoaded]);
+  }, [receipts, categories, budgets, debts, receivables, isLoaded]);
 
   const addReceipt = (newDoc: Partial<ExpenseDocument> & { items?: Partial<ExpenseItem>[] }) => {
     const docId = `doc-${Date.now()}`;
@@ -384,6 +431,73 @@ export function ReceiptsProvider({ children }: { children: React.ReactNode }) {
     );
   };
 
+  // Métodos de Cuentas por Cobrar y Facturas de Venta
+  const addReceivable = (newRec: Omit<AccountReceivable, 'id' | 'created_at' | 'updated_at' | 'status'>) => {
+    const recId = `rec-${Date.now()}`;
+    const status = computeReceivableStatus(newRec.due_date, false);
+
+    const created: AccountReceivable = {
+      ...newRec,
+      id: recId,
+      user_id: 'user-demo-1',
+      status,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    setReceivables((prev) => [created, ...prev]);
+    return created;
+  };
+
+  const markReceivableAsCollected = (id: string, paymentMethod?: string) => {
+    setReceivables((prev) =>
+      prev.map((r) => {
+        if (r.id !== id) return r;
+        return {
+          ...r,
+          status: 'collected',
+          collected_at: new Date().toISOString(),
+          collected_amount: r.total_amount,
+          payment_method: paymentMethod || 'Transferencia Bancaria',
+          updated_at: new Date().toISOString(),
+        };
+      })
+    );
+  };
+
+  const unmarkReceivableAsCollected = (id: string) => {
+    setReceivables((prev) =>
+      prev.map((r) => {
+        if (r.id !== id) return r;
+        return {
+          ...r,
+          status: computeReceivableStatus(r.due_date, false),
+          collected_at: null,
+          collected_amount: null,
+          payment_method: null,
+          updated_at: new Date().toISOString(),
+        };
+      })
+    );
+  };
+
+  const deleteReceivable = (id: string) => {
+    setReceivables((prev) => prev.filter((r) => r.id !== id));
+  };
+
+  const updateReceivable = (id: string, fields: Partial<AccountReceivable>) => {
+    setReceivables((prev) =>
+      prev.map((r) => {
+        if (r.id !== id) return r;
+        const updated = { ...r, ...fields, updated_at: new Date().toISOString() };
+        if (fields.due_date || fields.collected_at !== undefined) {
+          updated.status = computeReceivableStatus(updated.due_date, !!updated.collected_at);
+        }
+        return updated;
+      })
+    );
+  };
+
   const resetToDemo = () => {
     clearAllData();
   };
@@ -391,10 +505,12 @@ export function ReceiptsProvider({ children }: { children: React.ReactNode }) {
   const clearAllData = () => {
     setReceipts([]);
     setDebts([]);
+    setReceivables([]);
     setCategories(INITIAL_CATEGORIES);
     setBudgets(DEMO_BUDGETS);
     localStorage.setItem(STORAGE_KEY_RECEIPTS, JSON.stringify([]));
     localStorage.setItem(STORAGE_KEY_DEBTS, JSON.stringify([]));
+    localStorage.setItem(STORAGE_KEY_RECEIVABLES, JSON.stringify([]));
   };
 
   return (
@@ -404,6 +520,7 @@ export function ReceiptsProvider({ children }: { children: React.ReactNode }) {
         categories,
         budgets,
         debts,
+        receivables,
         addReceipt,
         updateReceipt,
         deleteReceipt,
@@ -419,6 +536,11 @@ export function ReceiptsProvider({ children }: { children: React.ReactNode }) {
         unmarkDebtAsPaid,
         deleteDebt,
         updateDebt,
+        addReceivable,
+        markReceivableAsCollected,
+        unmarkReceivableAsCollected,
+        deleteReceivable,
+        updateReceivable,
         resetToDemo,
         clearAllData,
       }}

@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React from 'react';
 import Link from 'next/link';
@@ -17,6 +17,7 @@ import {
   BookOpen,
   Landmark,
   Clock,
+  Briefcase,
   X,
 } from 'lucide-react';
 import { OrganizationSwitcher } from './organization-switcher';
@@ -32,7 +33,7 @@ interface SidebarProps {
 
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const pathname = usePathname();
-  const { debts } = useReceipts();
+  const { debts, receivables } = useReceipts();
   const { activeOrgId } = useAuth();
 
   const scopedDebts = debts.filter((d) => {
@@ -46,7 +47,19 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     return true;
   });
 
+  const scopedReceivables = receivables.filter((r) => {
+    if (activeOrgId !== 'all') {
+      if (activeOrgId === 'org-personal') {
+        if (r.income_type !== 'personal' && r.organization_id !== 'org-personal') return false;
+      } else {
+        if (r.organization_id && r.organization_id !== activeOrgId) return false;
+      }
+    }
+    return true;
+  });
+
   const urgentDebtsCount = scopedDebts.filter((d) => d.status === 'overdue' || d.status === 'due_soon').length;
+  const urgentReceivablesCount = scopedReceivables.filter((r) => r.status === 'overdue' || r.status === 'due_soon').length;
 
   const navItems = [
     { label: 'Dashboard', href: '/', icon: LayoutDashboard },
@@ -58,6 +71,13 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       icon: Clock,
       badge: urgentDebtsCount > 0 ? `${urgentDebtsCount}` : undefined,
       badgeColor: 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300',
+    },
+    {
+      label: 'Cuentas por Cobrar',
+      href: '/cuentas-por-cobrar',
+      icon: Briefcase,
+      badge: urgentReceivablesCount > 0 ? `${urgentReceivablesCount}` : undefined,
+      badgeColor: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300',
     },
     { label: 'Conciliación Bancaria', href: '/conciliacion-bancaria', icon: Landmark, badge: 'Banco' },
     { label: 'Libro de Compras', href: '/libro-compras', icon: BookOpen, badge: 'F29' },

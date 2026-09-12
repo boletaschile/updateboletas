@@ -20,6 +20,9 @@ export type UserRole = 'owner' | 'admin' | 'member' | 'viewer';
 export type DebtStatus = 'pending' | 'due_soon' | 'overdue' | 'paid';
 export type DebtCategory = 'factura_proveedor' | 'credito_bancario' | 'impuesto_f29' | 'previred' | 'servicio_suscripcion' | 'arriendo' | 'tarjeta_credito' | 'otro';
 
+export type ReceivableStatus = 'pending' | 'due_soon' | 'overdue' | 'collected';
+export type ReceivableDocumentType = 'factura_afecta' | 'factura_exenta' | 'boleta_honorarios' | 'orden_compra' | 'sin_facturar';
+
 export interface Profile {
   id: string;
   email: string;
@@ -195,6 +198,32 @@ export interface AccountPayable {
   installment_amount?: number | null; // Valor de la cuota mensual en CLP
   total_credit_amount?: number | null; // Monto total o saldo del crédito en CLP
 
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface AccountReceivable {
+  id: string;
+  user_id: string;
+  organization_id?: string | null;
+  client_name: string;
+  client_rut?: string | null;
+  client_contact?: string | null;
+  service_description: string;
+  document_type: ReceivableDocumentType;
+  invoice_number?: string | null;
+  net_amount: number;
+  tax_amount: number;
+  total_amount: number;
+  issue_date: string;
+  due_date: string;
+  reminder_days_before: number;
+  income_type: 'business' | 'personal';
+  status: ReceivableStatus;
+  collected_at?: string | null;
+  collected_amount?: number | null;
+  payment_method?: string | null;
+  notes?: string | null;
   created_at: string;
   updated_at: string;
 }

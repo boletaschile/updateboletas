@@ -28,6 +28,7 @@ import {
   Bell,
   BookOpen,
   Landmark,
+  Briefcase,
 } from 'lucide-react';
 import {
   BarChart,
@@ -46,8 +47,20 @@ import {
 const CHART_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EC4899', '#8B5CF6', '#06B6D4', '#64748B'];
 
 export default function DashboardPage() {
-  const { receipts, budgets, debts } = useReceipts();
+  const { receipts, budgets, debts, receivables } = useReceipts();
   const { activeOrgId, activeOrg } = useAuth();
+
+  // Cuentas por Cobrar y Facturas de Venta filtradas
+  const scopedReceivables = useMemo(() => {
+    return (receivables || []).filter((r) => {
+      if (activeOrgId === 'all') return true;
+      if (activeOrgId === 'org-personal') return r.income_type === 'personal' || r.organization_id === 'org-personal';
+      return r.organization_id === activeOrgId || (r.income_type === 'business' && (!r.organization_id || r.organization_id === 'org-empresa-1'));
+    });
+  }, [receivables, activeOrgId]);
+
+  const pendingReceivables = useMemo(() => scopedReceivables.filter((r) => r.status !== 'collected'), [scopedReceivables]);
+  const totalPendingReceivable = useMemo(() => pendingReceivables.reduce((acc, r) => acc + r.total_amount, 0), [pendingReceivables]);
 
   // Métricas del mes actual filtradas por la empresa o perfil seleccionado
   const currentMonthReceipts = useMemo(() => {
@@ -240,7 +253,13 @@ export default function DashboardPage() {
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <Link href="/cuentas-por-cobrar">
+              <Button variant="outline" className="border-blue-400/30 bg-blue-950/40 text-blue-100 hover:bg-blue-900/60 gap-1.5 font-medium text-xs">
+                <Briefcase className="h-4 w-4 text-emerald-400" />
+                <span>Cuentas por Cobrar</span>
+              </Button>
+            </Link>
             <Link href="/receipts/new">
               <Button className="bg-white text-slate-950 hover:bg-slate-100 gap-2 font-semibold shadow-md text-xs">
                 <PlusCircle className="h-4 w-4 text-blue-600" />
@@ -249,6 +268,30 @@ export default function DashboardPage() {
             </Link>
           </div>
         </div>
+
+        {/* Alerta de Cuentas por Cobrar Pendientes */}
+        {pendingReceivables.length > 0 && (
+          <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 flex items-center justify-between gap-4 text-xs">
+            <div className="flex items-center gap-3">
+              <div className="h-9 w-9 rounded-full bg-emerald-100 dark:bg-emerald-900/50 text-emerald-600 flex items-center justify-center flex-shrink-0">
+                <Briefcase className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="font-bold text-emerald-950 dark:text-emerald-200">
+                  Flujo de Ingresos por Cobrar: {formatCLP(totalPendingReceivable)} ({pendingReceivables.length} factura/servicio pendiente)
+                </p>
+                <p className="text-emerald-800 dark:text-emerald-300 text-[11px]">
+                  Gestión activa de cobranza y facturación a clientes.
+                </p>
+              </div>
+            </div>
+            <Link href="/cuentas-por-cobrar">
+              <Button size="sm" variant="outline" className="text-xs border-emerald-300 bg-white dark:bg-slate-900 text-emerald-900 dark:text-emerald-200 whitespace-nowrap font-medium">
+                Gestionar Cobros
+              </Button>
+            </Link>
+          </div>
+        )}
 
         {/* Alerta de Cuentas por Pagar Urgentes */}
         {(overdueDebts.length > 0 || dueSoonDebts.length > 0) && (
