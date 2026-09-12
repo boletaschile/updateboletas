@@ -37,113 +37,12 @@ const STORAGE_KEY_ORGS = 'subeboletas_auth_orgs_v1';
 const STORAGE_KEY_ACTIVE_ORG = 'subeboletas_auth_active_org_v1';
 const STORAGE_KEY_MEMBERS = 'subeboletas_auth_members_v1';
 
-const DEFAULT_USER: Profile = {
-  id: 'user-demo-1',
-  email: 'contacto@estudiocreativo.cl',
-  full_name: 'Rodrigo Fuentes',
-  avatar_url: null,
-  preferred_currency: 'CLP',
-  date_format: 'DD/MM/YYYY',
-  created_at: new Date().toISOString(),
-  updated_at: new Date().toISOString(),
-};
-
-const DEFAULT_ORGS: Organization[] = [
-  {
-    id: 'org-personal',
-    name: 'Finanzas Personales',
-    rut: '16.789.123-4',
-    legal_name: 'Rodrigo Fuentes',
-    type: 'personal',
-    created_by: 'user-demo-1',
-    created_at: '2026-01-01T00:00:00Z',
-    updated_at: '2026-01-01T00:00:00Z',
-    members_count: 1,
-  },
-  {
-    id: 'org-empresa-1',
-    name: 'Estudio Creativo SpA',
-    rut: '76.890.123-4',
-    legal_name: 'Estudio Creativo y Diseño SpA',
-    activity: 'Servicios de publicidad, diseño e informática',
-    type: 'business',
-    created_by: 'user-demo-1',
-    created_at: '2026-01-15T00:00:00Z',
-    updated_at: '2026-01-15T00:00:00Z',
-    members_count: 3,
-  },
-  {
-    id: 'org-empresa-2',
-    name: 'Comercializadora Andina Ltda',
-    rut: '77.456.789-K',
-    legal_name: 'Comercializadora e Importadora Andina Limitada',
-    activity: 'Venta de insumos y equipos',
-    type: 'business',
-    created_by: 'user-demo-1',
-    created_at: '2026-03-10T00:00:00Z',
-    updated_at: '2026-03-10T00:00:00Z',
-    members_count: 2,
-  },
-];
-
-const DEFAULT_MEMBERS: Record<string, OrganizationMember[]> = {
-  'org-empresa-1': [
-    {
-      id: 'm-1',
-      organization_id: 'org-empresa-1',
-      user_id: 'user-demo-1',
-      email: 'contacto@estudiocreativo.cl',
-      full_name: 'Rodrigo Fuentes (Tú)',
-      role: 'owner',
-      created_at: '2026-01-15T00:00:00Z',
-    },
-    {
-      id: 'm-2',
-      organization_id: 'org-empresa-1',
-      user_id: 'user-demo-2',
-      email: 'contabilidad@estudiocreativo.cl',
-      full_name: 'Camila Morales (Contadora)',
-      role: 'admin',
-      created_at: '2026-02-01T00:00:00Z',
-    },
-    {
-      id: 'm-3',
-      organization_id: 'org-empresa-1',
-      user_id: 'user-demo-3',
-      email: 'ventas@estudiocreativo.cl',
-      full_name: 'Ignacio Silva',
-      role: 'member',
-      created_at: '2026-04-12T00:00:00Z',
-    },
-  ],
-  'org-empresa-2': [
-    {
-      id: 'm-4',
-      organization_id: 'org-empresa-2',
-      user_id: 'user-demo-1',
-      email: 'contacto@estudiocreativo.cl',
-      full_name: 'Rodrigo Fuentes',
-      role: 'owner',
-      created_at: '2026-03-10T00:00:00Z',
-    },
-    {
-      id: 'm-5',
-      organization_id: 'org-empresa-2',
-      user_id: 'user-demo-4',
-      email: 'socio@andinachile.cl',
-      full_name: 'Matías Valenzuela',
-      role: 'admin',
-      created_at: '2026-03-15T00:00:00Z',
-    },
-  ],
-};
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<Profile | null>(DEFAULT_USER);
-  const [organizations, setOrganizations] = useState<Organization[]>(DEFAULT_ORGS);
+  const [user, setUser] = useState<Profile | null>(null);
+  const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [activeOrgId, setActiveOrgId] = useState<string>('all');
-  const [members, setMembers] = useState<Record<string, OrganizationMember[]>>(DEFAULT_MEMBERS);
-  const [isLoading, setIsLoading] = useState(false);
+  const [members, setMembers] = useState<Record<string, OrganizationMember[]>>({});
+  const [isLoading, setIsLoading] = useState(true);
 
   // Cargar de LocalStorage
   useEffect(() => {
@@ -153,43 +52,82 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const savedActiveOrg = localStorage.getItem(STORAGE_KEY_ACTIVE_ORG);
       const savedMembers = localStorage.getItem(STORAGE_KEY_MEMBERS);
 
-      if (savedUser) setUser(JSON.parse(savedUser));
-      if (savedOrgs) setOrganizations(JSON.parse(savedOrgs));
+      if (savedUser) {
+        setUser(JSON.parse(savedUser));
+      } else {
+        setUser(null);
+      }
+
+      if (savedOrgs) {
+        setOrganizations(JSON.parse(savedOrgs));
+      } else {
+        setOrganizations([]);
+      }
+
       if (savedActiveOrg) setActiveOrgId(savedActiveOrg);
       if (savedMembers) setMembers(JSON.parse(savedMembers));
     } catch (e) {
       console.warn('Error cargando estado de Auth:', e);
+    } finally {
+      setIsLoading(false);
     }
   }, []);
 
   // Guardar en LocalStorage
   useEffect(() => {
+    if (isLoading) return;
     try {
-      if (user) localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(user));
+      if (user) {
+        localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(user));
+      } else {
+        localStorage.removeItem(STORAGE_KEY_USER);
+      }
       localStorage.setItem(STORAGE_KEY_ORGS, JSON.stringify(organizations));
       localStorage.setItem(STORAGE_KEY_ACTIVE_ORG, activeOrgId);
       localStorage.setItem(STORAGE_KEY_MEMBERS, JSON.stringify(members));
     } catch (e) {
       console.warn('Error persistiendo estado de Auth:', e);
     }
-  }, [user, organizations, activeOrgId, members]);
+  }, [user, organizations, activeOrgId, members, isLoading]);
 
   const activeOrg = activeOrgId === 'all' ? null : organizations.find((o) => o.id === activeOrgId) || null;
 
   const login = async (email: string, password?: string) => {
     setIsLoading(true);
-    await new Promise((r) => setTimeout(r, 500));
+    await new Promise((r) => setTimeout(r, 400));
+    const cleanEmail = email.trim().toLowerCase();
+    const userId = `user-${cleanEmail.replace(/[^a-z0-9]/g, '_')}`;
+    const namePart = cleanEmail.split('@')[0];
+    const fullName = namePart.charAt(0).toUpperCase() + namePart.slice(1);
+
     const loggedUser: Profile = {
-      id: `user-${Date.now()}`,
-      email: email.trim().toLowerCase(),
-      full_name: email.split('@')[0],
+      id: userId,
+      email: cleanEmail,
+      full_name: fullName,
       avatar_url: null,
       preferred_currency: 'CLP',
       date_format: 'DD/MM/YYYY',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
+
     setUser(loggedUser);
+    setOrganizations((prev) => {
+      if (prev.length > 0) return prev;
+      return [
+        {
+          id: `org-personal-${Date.now()}`,
+          name: 'Finanzas Personales',
+          rut: null,
+          legal_name: fullName,
+          type: 'personal',
+          created_by: userId,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          members_count: 1,
+        },
+      ];
+    });
     setIsLoading(false);
     return true;
   };
@@ -253,7 +191,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = () => {
     setUser(null);
+    setOrganizations([]);
+    setActiveOrgId('all');
     localStorage.removeItem(STORAGE_KEY_USER);
+    localStorage.removeItem(STORAGE_KEY_ORGS);
+    localStorage.removeItem(STORAGE_KEY_ACTIVE_ORG);
+    localStorage.removeItem(STORAGE_KEY_MEMBERS);
+    window.location.href = '/login';
   };
 
   const createOrganization = (data: {

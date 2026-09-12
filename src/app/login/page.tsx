@@ -12,8 +12,8 @@ import { Receipt, Mail, Lock, ArrowRight, Loader2, ShieldCheck, UserCheck, Check
 export default function LoginPage() {
   const { login, isLoading } = useAuth();
 
-  const [email, setEmail] = useState('contacto@estudiocreativo.cl');
-  const [password, setPassword] = useState('123456');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [isSuccess, setIsSuccess] = useState(false);
 
@@ -30,12 +30,6 @@ export default function LoginPage() {
       setIsSuccess(false);
       setErrorMessage('Ocurrió un error al iniciar sesión. Verifica tus datos.');
     }
-  };
-
-  const handleQuickDemoLogin = async () => {
-    setIsSuccess(true);
-    await login('contacto@estudiocreativo.cl', '123456');
-    window.location.href = '/';
   };
 
   return (
@@ -59,37 +53,11 @@ export default function LoginPage() {
           <CardHeader className="space-y-1 pb-4">
             <CardTitle className="text-lg text-white">Iniciar Sesión</CardTitle>
             <CardDescription className="text-xs text-slate-400">
-              Ingresa con tu correo o usa el acceso rápido de demostración.
+              Ingresa con tu correo y contraseña para acceder a tus finanzas y boletas.
             </CardDescription>
           </CardHeader>
 
           <CardContent className="space-y-4">
-            {/* Botón de Acceso Rápido Demo (1 Clic) */}
-            <Button
-              type="button"
-              disabled={isSuccess || isLoading}
-              onClick={handleQuickDemoLogin}
-              className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-semibold text-xs h-11 gap-2 shadow-md active:scale-95 transition-all"
-            >
-              {isSuccess ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>Ingresando al sistema...</span>
-                </>
-              ) : (
-                <>
-                  <UserCheck className="h-4 w-4" />
-                  <span>Entrar con Usuario Demo (1 Clic)</span>
-                </>
-              )}
-            </Button>
-
-            <div className="relative flex py-1 items-center">
-              <div className="flex-grow border-t border-slate-800"></div>
-              <span className="flex-shrink mx-3 text-[10px] text-slate-500 uppercase font-semibold">o con tu correo</span>
-              <div className="flex-grow border-t border-slate-800"></div>
-            </div>
-
             <form onSubmit={handleSubmit} className="space-y-3.5">
               <div className="space-y-1.5">
                 <Label className="text-xs text-slate-300">Correo Electrónico</Label>
@@ -109,7 +77,6 @@ export default function LoginPage() {
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <Label className="text-xs text-slate-300">Contraseña</Label>
-                  <span className="text-[10px] text-slate-500">(Cualquier clave)</span>
                 </div>
                 <div className="relative">
                   <Lock className="h-4 w-4 absolute left-3 top-3 text-slate-500" />

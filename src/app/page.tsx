@@ -138,14 +138,67 @@ export default function DashboardPage() {
       .slice(0, 6);
   }, [currentMonthReceipts, paidDebts]);
 
-  // Datos para Gráfico Comparativo Empresa vs Personal
+  // Datos para Gráfico Comparativo Empresa vs Personal calculados dinámicamente
   const monthlyComparisonData = useMemo(() => {
-    return [
-      { name: 'Julio', empresa: 380000, personal: 220000 },
-      { name: 'Agosto', empresa: 410000, personal: 240000 },
-      { name: 'Septiembre (Actual)', empresa: totalBusiness, personal: totalPersonal },
+    const monthNames = [
+      'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun',
+      'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic',
     ];
-  }, [totalBusiness, totalPersonal]);
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+
+    const months = [
+      new Date(currentYear, currentMonth - 2, 1),
+      new Date(currentYear, currentMonth - 1, 1),
+      new Date(currentYear, currentMonth, 1),
+    ];
+
+    return months.map((m) => {
+      const year = m.getFullYear();
+      const month = m.getMonth();
+      const monthPrefix = `${year}-${String(month + 1).padStart(2, '0')}`;
+      const isCurrent = month === currentMonth && year === currentYear;
+
+      const mReceipts = receipts.filter((r) => {
+        if (r.status === 'rejected') return false;
+        if (activeOrgId !== 'all') {
+          if (activeOrgId === 'org-personal') {
+            if (r.expense_type !== 'personal' && r.organization_id !== 'org-personal') return false;
+          } else {
+            if (r.organization_id && r.organization_id !== activeOrgId) return false;
+          }
+        }
+        return r.document_date && r.document_date.startsWith(monthPrefix);
+      });
+
+      const mPaidDebts = scopedDebts.filter((d) => {
+        if (d.status !== 'paid') return false;
+        const pDate = d.paid_at ? d.paid_at.substring(0, 7) : d.due_date.substring(0, 7);
+        return pDate === monthPrefix;
+      });
+
+      const recBus = mReceipts.reduce((acc, r) => acc + r.business_total, 0);
+      const recPer = mReceipts.reduce((acc, r) => acc + r.personal_total, 0);
+      const debtBus = mPaidDebts.filter((d) => d.expense_type === 'business').reduce((acc, d) => acc + (d.paid_amount || d.installment_amount || d.amount), 0);
+      const debtPer = mPaidDebts.filter((d) => d.expense_type === 'personal').reduce((acc, d) => acc + (d.paid_amount || d.installment_amount || d.amount), 0);
+
+      return {
+        name: isCurrent ? `${monthNames[month]} (Actual)` : monthNames[month],
+        empresa: isCurrent ? totalBusiness : recBus + debtBus,
+        personal: isCurrent ? totalPersonal : recPer + debtPer,
+      };
+    });
+  }, [receipts, scopedDebts, activeOrgId, totalBusiness, totalPersonal]);
+
+  const currentPeriodName = useMemo(() => {
+    const fullMonths = [
+      'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+      'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
+    ];
+    const now = new Date();
+    return `${fullMonths[now.getMonth()]} ${now.getFullYear()}`;
+  }, []);
 
   // Top Comercios
   const topMerchants = useMemo(() => {
@@ -173,7 +226,7 @@ export default function DashboardPage() {
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <Badge className="bg-blue-500/20 text-blue-200 border-blue-400/30 text-xs">
-                Período: Septiembre 2026
+                Período: {currentPeriodName}
               </Badge>
               <Badge className="bg-emerald-500/20 text-emerald-200 border-emerald-400/30 text-xs">
                 Chile (CLP)

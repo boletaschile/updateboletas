@@ -40,9 +40,9 @@ export default function SettingsPage() {
           <CardContent className="p-5 space-y-4">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 rounded-xl bg-background border">
               <div className="space-y-1">
-                <p className="text-xs font-bold text-foreground">Vaciar Todo y Comenzar en Blanco</p>
+                <p className="text-xs font-bold text-foreground">Vaciar Almacenamiento Local</p>
                 <p className="text-[11px] text-muted-foreground max-w-lg">
-                  Elimina todas las boletas y deudas de demostración de una sola vez. Mantiene tus categorías oficiales listas para que puedas registrar tus gastos reales.
+                  Limpia todas las boletas y deudas registradas localmente en este navegador. Mantiene tus categorías oficiales para que puedas registrar tus gastos reales.
                 </p>
               </div>
               <Button
@@ -52,27 +52,6 @@ export default function SettingsPage() {
                 className="gap-1.5 text-xs whitespace-nowrap shadow-sm"
               >
                 <span>Vaciar Datos y Empezar de Cero</span>
-              </Button>
-            </div>
-
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 rounded-xl bg-background/60 border">
-              <div className="space-y-1">
-                <p className="text-xs font-semibold text-foreground">Restaurar Ejemplos Demo</p>
-                <p className="text-[11px] text-muted-foreground max-w-lg">
-                  Si deseas volver a explorar el sistema con datos de ejemplo (Copec, Sodimac, Adobe, Créditos bancarios, etc.).
-                </p>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  resetToDemo();
-                  alert('Datos de prueba restaurados.');
-                }}
-                className="gap-1.5 text-xs whitespace-nowrap"
-              >
-                <RefreshCw className="h-3.5 w-3.5" />
-                <span>Cargar Ejemplos Demo</span>
               </Button>
             </div>
           </CardContent>

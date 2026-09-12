@@ -2,8 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { ExpenseDocument, ExpenseItem, Category, MonthlyBudget, AccountPayable, DebtStatus } from '@/types';
-import { DEMO_RECEIPTS, INITIAL_CATEGORIES, DEMO_BUDGETS } from './demo-data';
-import { DEMO_DEBTS } from './demo-debts';
+import { INITIAL_CATEGORIES, DEMO_BUDGETS } from './demo-data';
 import { calculateTotalsBreakdown } from '@/lib/utils';
 
 interface ReceiptsContextType {
@@ -57,10 +56,10 @@ function computeDebtStatus(dueDate: string, isPaid?: boolean): DebtStatus {
 }
 
 export function ReceiptsProvider({ children }: { children: React.ReactNode }) {
-  const [receipts, setReceipts] = useState<ExpenseDocument[]>(DEMO_RECEIPTS);
+  const [receipts, setReceipts] = useState<ExpenseDocument[]>([]);
   const [categories, setCategories] = useState<Category[]>(INITIAL_CATEGORIES);
   const [budgets, setBudgets] = useState<MonthlyBudget[]>(DEMO_BUDGETS);
-  const [debts, setDebts] = useState<AccountPayable[]>(DEMO_DEBTS);
+  const [debts, setDebts] = useState<AccountPayable[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
 
   // Cargar de LocalStorage si existe
@@ -386,19 +385,14 @@ export function ReceiptsProvider({ children }: { children: React.ReactNode }) {
   };
 
   const resetToDemo = () => {
-    setReceipts(DEMO_RECEIPTS);
-    setCategories(INITIAL_CATEGORIES);
-    setBudgets(DEMO_BUDGETS);
-    setDebts(DEMO_DEBTS);
-    localStorage.removeItem(STORAGE_KEY_RECEIPTS);
-    localStorage.removeItem(STORAGE_KEY_CATEGORIES);
-    localStorage.removeItem(STORAGE_KEY_BUDGETS);
-    localStorage.removeItem(STORAGE_KEY_DEBTS);
+    clearAllData();
   };
 
   const clearAllData = () => {
     setReceipts([]);
     setDebts([]);
+    setCategories(INITIAL_CATEGORIES);
+    setBudgets(DEMO_BUDGETS);
     localStorage.setItem(STORAGE_KEY_RECEIPTS, JSON.stringify([]));
     localStorage.setItem(STORAGE_KEY_DEBTS, JSON.stringify([]));
   };
