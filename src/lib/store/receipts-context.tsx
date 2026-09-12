@@ -14,6 +14,21 @@ import {
 import { INITIAL_CATEGORIES } from './demo-data';
 import { useAuth } from './auth-context';
 import { calculateTotalsBreakdown } from '@/lib/utils';
+import {
+  ensureUUID,
+  dbFetchDocuments,
+  dbInsertDocument,
+  dbUpdateDocument,
+  dbDeleteDocument,
+  dbFetchDebts,
+  dbInsertDebt,
+  dbUpdateDebt,
+  dbDeleteDebt,
+  dbFetchReceivables,
+  dbInsertReceivable,
+  dbUpdateReceivable,
+  dbDeleteReceivable,
+} from '@/lib/supabase/db-service';
 
 interface ReceiptsContextType {
   receipts: ExpenseDocument[];
@@ -194,6 +209,25 @@ export function ReceiptsProvider({ children }: { children: React.ReactNode }) {
       } else {
         setReceivables([]);
       }
+
+      // Sincronizar en tiempo real desde Supabase si está configurado
+      dbFetchDocuments().then((supabaseDocs) => {
+        if (supabaseDocs && supabaseDocs.length > 0) {
+          setReceipts(supabaseDocs);
+        }
+      });
+
+      dbFetchDebts().then((supabaseDebts) => {
+        if (supabaseDebts && supabaseDebts.length > 0) {
+          setDebts(supabaseDebts);
+        }
+      });
+
+      dbFetchReceivables().then((supabaseRecs) => {
+        if (supabaseRecs && supabaseRecs.length > 0) {
+          setReceivables(supabaseRecs);
+        }
+      });
     } catch (e) {
       console.warn('Error cargando datos de LocalStorage:', e);
     } finally {
@@ -216,9 +250,9 @@ export function ReceiptsProvider({ children }: { children: React.ReactNode }) {
   }, [receipts, categories, budgets, debts, receivables, isLoaded]);
 
   const addReceipt = (newDoc: Partial<ExpenseDocument> & { items?: Partial<ExpenseItem>[] }) => {
-    const docId = `doc-${Date.now()}`;
-    const formattedItems: ExpenseItem[] = (newDoc.items || []).map((it, idx) => ({
-      id: `item-${Date.now()}-${idx}`,
+    const docId = ensureUUID();
+    const formattedItems: ExpenseItem[] = (newDoc.items || []).map((it) => ({
+      id: ensureUUID(it.id),
       expense_document_id: docId,
       original_name: it.original_name || 'Ítem sin nombre',
       normalized_name: it.normalized_name || it.original_name || 'Ítem sin nombre',
@@ -280,6 +314,7 @@ export function ReceiptsProvider({ children }: { children: React.ReactNode }) {
     };
 
     setReceipts((prev) => [doc, ...prev]);
+    dbInsertDocument(doc);
     return doc;
   };
 
@@ -299,10 +334,12 @@ export function ReceiptsProvider({ children }: { children: React.ReactNode }) {
         return updated;
       })
     );
+    dbUpdateDocument(id, updatedFields);
   };
 
   const deleteReceipt = (id: string) => {
     setReceipts((prev) => prev.filter((d) => d.id !== id));
+    dbDeleteDocument(id);
   };
 
   const updateReceiptItem = (docId: string, itemId: string, updatedFields: Partial<ExpenseItem>) => {
@@ -431,7 +468,7 @@ export function ReceiptsProvider({ children }: { children: React.ReactNode }) {
 
   // Métodos de Cuentas por Pagar y Deudas
   const addDebt = (newDebt: Omit<AccountPayable, 'id' | 'created_at' | 'updated_at' | 'status'>) => {
-    const debtId = `debt-${Date.now()}`;
+    const debtId = ensureUUID();
     const status = computeDebtStatus(newDebt.due_date, false);
 
     const created: AccountPayable = {
@@ -444,10 +481,12 @@ export function ReceiptsProvider({ children }: { children: React.ReactNode }) {
     };
 
     setDebts((prev) => [created, ...prev]);
+    dbInsertDebt(created);
     return created;
   };
 
   const markDebtAsPaid = (id: string, paymentMethod?: string) => {
+    const paidAt = new Date().toISOString();
     setDebts((prev) =>
       prev.map((d) => {
         if (d.id !== id) return d;
@@ -455,16 +494,23 @@ export function ReceiptsProvider({ children }: { children: React.ReactNode }) {
         return {
           ...d,
           status: 'paid',
-          paid_at: new Date().toISOString(),
+          paid_at: paidAt,
           paid_amount: paidAmount,
           payment_method: paymentMethod || 'Transferencia Bancaria',
-          updated_at: new Date().toISOString(),
+          updated_at: paidAt,
         };
       })
     );
+    dbUpdateDebt(id, {
+      status: 'paid',
+      paid_at: paidAt,
+      payment_method: paymentMethod || 'Transferencia Bancaria',
+      updated_at: paidAt,
+    });
   };
 
   const unmarkDebtAsPaid = (id: string) => {
+    const updatedAt = new Date().toISOString();
     setDebts((prev) =>
       prev.map((d) => {
         if (d.id !== id) return d;
@@ -474,14 +520,22 @@ export function ReceiptsProvider({ children }: { children: React.ReactNode }) {
           paid_at: null,
           paid_amount: null,
           payment_method: null,
-          updated_at: new Date().toISOString(),
+          updated_at: updatedAt,
         };
       })
     );
+    dbUpdateDebt(id, {
+      status: 'pending',
+      paid_at: null,
+      paid_amount: null,
+      payment_method: null,
+      updated_at: updatedAt,
+    });
   };
 
   const deleteDebt = (id: string) => {
     setDebts((prev) => prev.filter((d) => d.id !== id));
+    dbDeleteDebt(id);
   };
 
   const updateDebt = (id: string, fields: Partial<AccountPayable>) => {
@@ -495,11 +549,12 @@ export function ReceiptsProvider({ children }: { children: React.ReactNode }) {
         return updated;
       })
     );
+    dbUpdateDebt(id, fields);
   };
 
   // Métodos de Cuentas por Cobrar y Facturas de Venta
   const addReceivable = (newRec: Omit<AccountReceivable, 'id' | 'created_at' | 'updated_at' | 'status'>) => {
-    const recId = `rec-${Date.now()}`;
+    const recId = ensureUUID();
     const status = computeReceivableStatus(newRec.due_date, false);
 
     const created: AccountReceivable = {
@@ -512,26 +567,35 @@ export function ReceiptsProvider({ children }: { children: React.ReactNode }) {
     };
 
     setReceivables((prev) => [created, ...prev]);
+    dbInsertReceivable(created);
     return created;
   };
 
   const markReceivableAsCollected = (id: string, paymentMethod?: string) => {
+    const collectedAt = new Date().toISOString();
     setReceivables((prev) =>
       prev.map((r) => {
         if (r.id !== id) return r;
         return {
           ...r,
           status: 'collected',
-          collected_at: new Date().toISOString(),
+          collected_at: collectedAt,
           collected_amount: r.total_amount,
           payment_method: paymentMethod || 'Transferencia Bancaria',
-          updated_at: new Date().toISOString(),
+          updated_at: collectedAt,
         };
       })
     );
+    dbUpdateReceivable(id, {
+      status: 'collected',
+      collected_at: collectedAt,
+      payment_method: paymentMethod || 'Transferencia Bancaria',
+      updated_at: collectedAt,
+    });
   };
 
   const unmarkReceivableAsCollected = (id: string) => {
+    const updatedAt = new Date().toISOString();
     setReceivables((prev) =>
       prev.map((r) => {
         if (r.id !== id) return r;
@@ -541,14 +605,22 @@ export function ReceiptsProvider({ children }: { children: React.ReactNode }) {
           collected_at: null,
           collected_amount: null,
           payment_method: null,
-          updated_at: new Date().toISOString(),
+          updated_at: updatedAt,
         };
       })
     );
+    dbUpdateReceivable(id, {
+      status: 'pending',
+      collected_at: null,
+      collected_amount: null,
+      payment_method: null,
+      updated_at: updatedAt,
+    });
   };
 
   const deleteReceivable = (id: string) => {
     setReceivables((prev) => prev.filter((r) => r.id !== id));
+    dbDeleteReceivable(id);
   };
 
   const updateReceivable = (id: string, fields: Partial<AccountReceivable>) => {
@@ -562,6 +634,7 @@ export function ReceiptsProvider({ children }: { children: React.ReactNode }) {
         return updated;
       })
     );
+    dbUpdateReceivable(id, fields);
   };
 
   const resetToDemo = () => {

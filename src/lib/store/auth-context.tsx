@@ -2,6 +2,8 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Profile, Organization, OrganizationMember, UserRole } from '@/types';
+import { getSupabaseBrowserClient, isSupabaseConfigured } from '@/lib/supabase/client';
+import { ensureUUID } from '@/lib/supabase/db-service';
 
 interface AuthContextType {
   user: Profile | null;
@@ -17,6 +19,7 @@ interface AuthContextType {
     accountType: 'personal' | 'business' | 'both';
     companyName?: string;
     companyRut?: string;
+    password?: string;
   }) => Promise<boolean>;
   logout: () => void;
   setActiveOrgId: (id: string) => void;
@@ -44,7 +47,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [members, setMembers] = useState<Record<string, OrganizationMember[]>>({});
   const [isLoading, setIsLoading] = useState(true);
 
-  // Cargar de LocalStorage
+  // Cargar de LocalStorage y sincronizar con Supabase Auth
   useEffect(() => {
     try {
       const savedUser = localStorage.getItem(STORAGE_KEY_USER);
@@ -66,6 +69,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (savedActiveOrg) setActiveOrgId(savedActiveOrg);
       if (savedMembers) setMembers(JSON.parse(savedMembers));
+
+      // Sincronizar usuario activo de Supabase si está disponible
+      if (isSupabaseConfigured()) {
+        const supabase = getSupabaseBrowserClient();
+        supabase.auth.getUser().then(({ data: { user: supaUser } }) => {
+          if (supaUser) {
+            const userProfile: Profile = {
+              id: supaUser.id,
+              email: supaUser.email || '',
+              full_name: (supaUser.user_metadata?.full_name as string) || supaUser.email?.split('@')[0] || 'Usuario',
+              avatar_url: null,
+              preferred_currency: 'CLP',
+              date_format: 'DD/MM/YYYY',
+              created_at: supaUser.created_at,
+              updated_at: supaUser.updated_at || supaUser.created_at,
+            };
+            setUser(userProfile);
+          }
+        }).catch(() => {});
+      }
     } catch (e) {
       console.warn('Error cargando estado de Auth:', e);
     } finally {
@@ -94,11 +117,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = async (email: string, password?: string) => {
     setIsLoading(true);
-    await new Promise((r) => setTimeout(r, 400));
     const cleanEmail = email.trim().toLowerCase();
-    const userId = `user-${cleanEmail.replace(/[^a-z0-9]/g, '_')}`;
+    let userId = ensureUUID();
     const namePart = cleanEmail.split('@')[0];
     const fullName = namePart.charAt(0).toUpperCase() + namePart.slice(1);
+
+    if (isSupabaseConfigured()) {
+      try {
+        const supabase = getSupabaseBrowserClient();
+        const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+          email: cleanEmail,
+          password: password || 'BoletasChile2026!',
+        });
+
+        if (authData?.user) {
+          userId = authData.user.id;
+        } else if (authError && (authError.message.toLowerCase().includes('invalid') || authError.message.toLowerCase().includes('credentials') || authError.message.toLowerCase().includes('not found'))) {
+          // Si no existe, registrar automáticamente en Supabase Auth
+          const { data: signUpData } = await supabase.auth.signUp({
+            email: cleanEmail,
+            password: password || 'BoletasChile2026!',
+            options: {
+              data: { full_name: fullName },
+            },
+          });
+          if (signUpData?.user) {
+            userId = signUpData.user.id;
+          }
+        }
+      } catch (err) {
+        console.warn('Supabase auth login error:', err);
+      }
+    }
 
     const loggedUser: Profile = {
       id: userId,
@@ -116,7 +166,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (prev.length > 0) return prev;
       return [
         {
-          id: `org-personal-${Date.now()}`,
+          id: ensureUUID(),
           name: 'Finanzas Personales',
           rut: null,
           legal_name: fullName,
@@ -138,14 +188,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     accountType: 'personal' | 'business' | 'both';
     companyName?: string;
     companyRut?: string;
+    password?: string;
   }) => {
     setIsLoading(true);
-    await new Promise((r) => setTimeout(r, 600));
+    const cleanEmail = data.email.trim().toLowerCase();
+    let newUserId = ensureUUID();
 
-    const newUserId = `user-${Date.now()}`;
+    if (isSupabaseConfigured()) {
+      try {
+        const supabase = getSupabaseBrowserClient();
+        const { data: signUpData } = await supabase.auth.signUp({
+          email: cleanEmail,
+          password: data.password || 'BoletasChile2026!',
+          options: {
+            data: { full_name: data.fullName.trim() },
+          },
+        });
+        if (signUpData?.user) {
+          newUserId = signUpData.user.id;
+        }
+      } catch (err) {
+        console.warn('Supabase auth register error:', err);
+      }
+    }
+
     const newUser: Profile = {
       id: newUserId,
-      email: data.email.trim().toLowerCase(),
+      email: cleanEmail,
       full_name: data.fullName.trim(),
       avatar_url: null,
       preferred_currency: 'CLP',
@@ -156,7 +225,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const newOrgs: Organization[] = [
       {
-        id: `org-personal-${Date.now()}`,
+        id: ensureUUID(),
         name: 'Gastos Personales',
         rut: null,
         legal_name: data.fullName,
@@ -170,7 +239,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (data.accountType === 'business' || data.accountType === 'both') {
       newOrgs.push({
-        id: `org-biz-${Date.now()}`,
+        id: ensureUUID(),
         name: data.companyName || 'Mi Empresa SpA',
         rut: data.companyRut || null,
         legal_name: data.companyName || 'Mi Empresa SpA',
@@ -197,6 +266,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.removeItem(STORAGE_KEY_ORGS);
     localStorage.removeItem(STORAGE_KEY_ACTIVE_ORG);
     localStorage.removeItem(STORAGE_KEY_MEMBERS);
+    if (isSupabaseConfigured()) {
+      try {
+        const supabase = getSupabaseBrowserClient();
+        supabase.auth.signOut().catch(() => {});
+      } catch (e) {}
+    }
     window.location.href = '/login';
   };
 
@@ -207,12 +282,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     type: 'business' | 'personal';
   }) => {
     const newOrg: Organization = {
-      id: `org-${Date.now()}`,
+      id: ensureUUID(),
       name: data.name.trim(),
       rut: data.rut?.trim() || null,
       legal_name: data.legal_name?.trim() || data.name.trim(),
       type: data.type,
-      created_by: user?.id || 'user-demo-1',
+      created_by: user?.id || ensureUUID(),
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       members_count: 1,

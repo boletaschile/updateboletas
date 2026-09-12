@@ -38,6 +38,7 @@ export default function RegisterPage() {
       setIsSuccess(true);
       await register({
         email,
+        password,
         fullName,
         accountType,
         companyName: companyName || undefined,
