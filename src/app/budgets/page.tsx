@@ -14,7 +14,7 @@ import { formatCLP } from '@/lib/utils';
 import { PieChart, AlertTriangle, CheckCircle2, TrendingUp, Sparkles, Building2, User } from 'lucide-react';
 
 export default function BudgetsPage() {
-  const { receipts, budgets, updateBudget } = useReceipts();
+  const { receipts, budgets, updateBudget, debts } = useReceipts();
   const { activeOrgId } = useAuth();
 
   const scopedReceipts = receipts.filter((r) => {
@@ -29,9 +29,33 @@ export default function BudgetsPage() {
     return true;
   });
 
-  const totalSpent = scopedReceipts.reduce((acc, r) => acc + r.total_amount, 0);
-  const totalBusiness = scopedReceipts.reduce((acc, r) => acc + r.business_total, 0);
-  const totalPersonal = scopedReceipts.reduce((acc, r) => acc + r.personal_total, 0);
+  const scopedDebts = debts.filter((d) => {
+    if (activeOrgId !== 'all') {
+      if (activeOrgId === 'org-personal') {
+        if (d.expense_type !== 'personal' && d.organization_id !== 'org-personal') return false;
+      } else {
+        if (d.organization_id && d.organization_id !== activeOrgId) return false;
+      }
+    }
+    return true;
+  });
+
+  const paidDebts = scopedDebts.filter((d) => d.status === 'paid');
+  const paidDebtsBusiness = paidDebts
+    .filter((d) => d.expense_type === 'business')
+    .reduce((acc, d) => acc + (d.paid_amount || d.installment_amount || d.amount), 0);
+  const paidDebtsPersonal = paidDebts
+    .filter((d) => d.expense_type === 'personal')
+    .reduce((acc, d) => acc + (d.paid_amount || d.installment_amount || d.amount), 0);
+  const totalPaidDebts = paidDebtsBusiness + paidDebtsPersonal;
+
+  const receiptsSpent = scopedReceipts.reduce((acc, r) => acc + r.total_amount, 0);
+  const receiptsBusiness = scopedReceipts.reduce((acc, r) => acc + r.business_total, 0);
+  const receiptsPersonal = scopedReceipts.reduce((acc, r) => acc + r.personal_total, 0);
+
+  const totalSpent = receiptsSpent + totalPaidDebts;
+  const totalBusiness = receiptsBusiness + paidDebtsBusiness;
+  const totalPersonal = receiptsPersonal + paidDebtsPersonal;
 
   const totalBudget = budgets.find((b) => b.budget_type === 'total') || { id: 'b-1', amount: 800000 };
   const businessBudget = budgets.find((b) => b.budget_type === 'business') || { id: 'b-2', amount: 500000 };
@@ -75,8 +99,10 @@ export default function BudgetsPage() {
           </div>
           <ul className="list-disc list-inside space-y-1 text-blue-900 dark:text-blue-300 pl-2">
             <li>El presupuesto total presenta un consumo del {totalPercent}% con {formatCLP(Math.max(0, totalBudget.amount - totalSpent))} disponible.</li>
-            <li>El gasto empresarial se mantiene controlado en {formatCLP(totalBusiness)} ({businessPercent}% del límite).</li>
-            <li>Se han procesado {receipts.length} comprobantes en el mes en curso.</li>
+            <li>El gasto empresarial consolidado es de {formatCLP(totalBusiness)} ({businessPercent}% del límite).</li>
+            <li>
+              Se consideran {scopedReceipts.length} comprobantes y {paidDebts.length} compromisos/cuotas pagadas ({formatCLP(totalPaidDebts)}) en el período.
+            </li>
           </ul>
         </div>
 

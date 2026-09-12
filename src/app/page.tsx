@@ -61,15 +61,6 @@ export default function DashboardPage() {
     });
   }, [receipts, activeOrgId]);
 
-  const totalSpent = currentMonthReceipts.reduce((acc, r) => acc + r.total_amount, 0);
-  const totalBusiness = currentMonthReceipts.reduce((acc, r) => acc + r.business_total, 0);
-  const totalPersonal = currentMonthReceipts.reduce((acc, r) => acc + r.personal_total, 0);
-  const pendingReviewCount = currentMonthReceipts.filter((r) => r.status === 'needs_review').length;
-
-  const totalBudget = budgets.find((b) => b.budget_type === 'total')?.amount || 800000;
-  const budgetUsagePercent = Math.min(100, Math.round((totalSpent / totalBudget) * 100));
-  const remainingBudget = Math.max(0, totalBudget - totalSpent);
-
   // Deudas y Compromisos filtrados por la empresa seleccionada
   const scopedDebts = useMemo(() => {
     return debts.filter((d) => {
@@ -79,11 +70,43 @@ export default function DashboardPage() {
     });
   }, [debts, activeOrgId]);
 
+  // Compromisos y deudas marcadas como pagadas (liquidadas)
+  const paidDebts = useMemo(() => scopedDebts.filter((d) => d.status === 'paid'), [scopedDebts]);
+
+  const paidDebtsBusiness = useMemo(() => {
+    return paidDebts
+      .filter((d) => d.expense_type === 'business')
+      .reduce((acc, d) => acc + (d.paid_amount || d.installment_amount || d.amount), 0);
+  }, [paidDebts]);
+
+  const paidDebtsPersonal = useMemo(() => {
+    return paidDebts
+      .filter((d) => d.expense_type === 'personal')
+      .reduce((acc, d) => acc + (d.paid_amount || d.installment_amount || d.amount), 0);
+  }, [paidDebts]);
+
+  const totalPaidDebts = paidDebtsBusiness + paidDebtsPersonal;
+
+  // Gastos de boletas
+  const receiptsSpent = currentMonthReceipts.reduce((acc, r) => acc + r.total_amount, 0);
+  const receiptsBusiness = currentMonthReceipts.reduce((acc, r) => acc + r.business_total, 0);
+  const receiptsPersonal = currentMonthReceipts.reduce((acc, r) => acc + r.personal_total, 0);
+
+  // Totales consolidados (Boletas + Compromisos/Deudas pagadas)
+  const totalSpent = receiptsSpent + totalPaidDebts;
+  const totalBusiness = receiptsBusiness + paidDebtsBusiness;
+  const totalPersonal = receiptsPersonal + paidDebtsPersonal;
+  const pendingReviewCount = currentMonthReceipts.filter((r) => r.status === 'needs_review').length;
+
+  const totalBudget = budgets.find((b) => b.budget_type === 'total')?.amount || 800000;
+  const budgetUsagePercent = Math.min(100, Math.round((totalSpent / totalBudget) * 100));
+  const remainingBudget = Math.max(0, totalBudget - totalSpent);
+
   const overdueDebts = scopedDebts.filter((d) => d.status === 'overdue');
   const dueSoonDebts = scopedDebts.filter((d) => d.status === 'due_soon');
   const totalUrgentDebt = [...overdueDebts, ...dueSoonDebts].reduce((acc, d) => acc + d.amount, 0);
 
-  // Datos para Gráfico de Categorías
+  // Datos para Gráfico de Categorías (Boletas + Compromisos Pagados)
   const categoryData = useMemo(() => {
     const map: Record<string, number> = {};
     currentMonthReceipts.forEach((r) => {
@@ -93,11 +116,27 @@ export default function DashboardPage() {
       });
     });
 
+    paidDebts.forEach((d) => {
+      const cat = d.is_installment_credit || d.category === 'credito_bancario'
+        ? 'Créditos y Préstamos'
+        : d.category === 'impuesto_f29'
+        ? 'Impuestos F29'
+        : d.category === 'previred'
+        ? 'Cotizaciones Previred'
+        : d.category === 'arriendo'
+        ? 'Arriendo Oficina'
+        : d.category === 'tarjeta_credito'
+        ? 'Tarjeta de Crédito'
+        : 'Compromisos Pagados';
+      const amt = d.paid_amount || d.installment_amount || d.amount;
+      map[cat] = (map[cat] || 0) + amt;
+    });
+
     return Object.entries(map)
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value)
       .slice(0, 6);
-  }, [currentMonthReceipts]);
+  }, [currentMonthReceipts, paidDebts]);
 
   // Datos para Gráfico Comparativo Empresa vs Personal
   const monthlyComparisonData = useMemo(() => {
@@ -194,9 +233,17 @@ export default function DashboardPage() {
               </div>
             </div>
             <h3 className="text-2xl font-extrabold text-foreground mt-2">{formatCLP(totalSpent)}</h3>
-            <div className="flex items-center gap-1.5 mt-2 text-[11px] text-emerald-600 font-medium">
-              <ArrowDownRight className="h-3.5 w-3.5" />
-              <span>-4.2% respecto a agosto</span>
+            <div className="flex items-center gap-1.5 mt-2 text-[11px] text-muted-foreground">
+              {totalPaidDebts > 0 ? (
+                <span className="text-blue-600 dark:text-blue-400 font-medium">
+                  Boletas: {formatCLP(receiptsSpent)} + Cuotas/Deudas: {formatCLP(totalPaidDebts)}
+                </span>
+              ) : (
+                <div className="flex items-center gap-1.5 text-emerald-600 font-medium">
+                  <ArrowDownRight className="h-3.5 w-3.5" />
+                  <span>-4.2% respecto a agosto</span>
+                </div>
+              )}
             </div>
           </Card>
 
@@ -210,7 +257,11 @@ export default function DashboardPage() {
             </div>
             <h3 className="text-2xl font-extrabold text-indigo-600 mt-2">{formatCLP(totalBusiness)}</h3>
             <div className="flex items-center gap-1.5 mt-2 text-[11px] text-muted-foreground">
-              <span>{Math.round((totalBusiness / (totalSpent || 1)) * 100)}% del gasto total</span>
+              {paidDebtsBusiness > 0 ? (
+                <span>Boletas: {formatCLP(receiptsBusiness)} • Cuotas/Deudas: {formatCLP(paidDebtsBusiness)}</span>
+              ) : (
+                <span>{Math.round((totalBusiness / (totalSpent || 1)) * 100)}% del gasto total</span>
+              )}
             </div>
           </Card>
 
@@ -224,7 +275,11 @@ export default function DashboardPage() {
             </div>
             <h3 className="text-2xl font-extrabold text-emerald-600 mt-2">{formatCLP(totalPersonal)}</h3>
             <div className="flex items-center gap-1.5 mt-2 text-[11px] text-muted-foreground">
-              <span>{Math.round((totalPersonal / (totalSpent || 1)) * 100)}% del gasto total</span>
+              {paidDebtsPersonal > 0 ? (
+                <span>Boletas: {formatCLP(receiptsPersonal)} • Cuotas/Deudas: {formatCLP(paidDebtsPersonal)}</span>
+              ) : (
+                <span>{Math.round((totalPersonal / (totalSpent || 1)) * 100)}% del gasto total</span>
+              )}
             </div>
           </Card>
 

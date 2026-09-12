@@ -31,7 +31,7 @@ import {
 } from 'lucide-react';
 
 export default function CuentasPorPagarPage() {
-  const { debts, markDebtAsPaid, deleteDebt } = useReceipts();
+  const { debts, markDebtAsPaid, unmarkDebtAsPaid, updateDebt, deleteDebt } = useReceipts();
   const { activeOrg, activeOrgId } = useAuth();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -128,7 +128,14 @@ export default function CuentasPorPagarPage() {
   const totalPendingAmount = pendingDebts.reduce((acc, d) => acc + d.amount, 0);
   const totalOverdueAmount = overdueDebts.reduce((acc, d) => acc + d.amount, 0);
   const totalDueSoonAmount = dueSoonDebts.reduce((acc, d) => acc + d.amount, 0);
-  const totalPaidAmount = paidDebts.reduce((acc, d) => acc + (d.paid_amount || d.amount), 0);
+  const totalPaidAmount = paidDebts.reduce((acc, d) => acc + (d.paid_amount || d.installment_amount || d.amount), 0);
+
+  const paidBusinessAmount = paidDebts
+    .filter((d) => d.expense_type === 'business')
+    .reduce((acc, d) => acc + (d.paid_amount || d.installment_amount || d.amount), 0);
+  const paidPersonalAmount = paidDebts
+    .filter((d) => d.expense_type === 'personal')
+    .reduce((acc, d) => acc + (d.paid_amount || d.installment_amount || d.amount), 0);
 
   return (
     <AppLayout
@@ -264,6 +271,15 @@ export default function CuentasPorPagarPage() {
             <span className="text-[11px] text-emerald-600 font-medium">
               {paidDebts.length} compromisos liquidados
             </span>
+            <div className="flex items-center gap-2 mt-1.5 text-[10px] text-muted-foreground flex-wrap">
+              <span className="text-blue-700 dark:text-blue-300 font-medium">🏢 Empresa: {formatCLP(paidBusinessAmount)}</span>
+              <span>•</span>
+              <span className="text-emerald-700 dark:text-emerald-300 font-medium">👤 Personal: {formatCLP(paidPersonalAmount)}</span>
+            </div>
+            <p className="text-[10px] text-emerald-700 dark:text-emerald-300 font-medium mt-1 flex items-center gap-1">
+              <CheckCircle2 className="h-3 w-3" />
+              <span>Sumadas a Gastos de Empresa / Personal</span>
+            </p>
           </Card>
         </div>
 
@@ -333,6 +349,7 @@ export default function CuentasPorPagarPage() {
                   <th className="px-3 py-3">Proveedor / Acreedor</th>
                   <th className="px-3 py-3">N° Factura / Folio</th>
                   <th className="px-3 py-3">Categoría</th>
+                  <th className="px-3 py-3 text-center">Ámbito</th>
                   <th className="px-3 py-3 text-right">Monto (CLP)</th>
                   <th className="px-3 py-3">Vencimiento</th>
                   <th className="px-3 py-3">Tiempo Restante</th>
@@ -343,7 +360,7 @@ export default function CuentasPorPagarPage() {
               <tbody className="divide-y">
                 {filteredDebts.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="py-12 text-center text-muted-foreground">
+                    <td colSpan={9} className="py-12 text-center text-muted-foreground">
                       No hay cuentas por pagar con los filtros seleccionados.
                     </td>
                   </tr>
@@ -390,6 +407,34 @@ export default function CuentasPorPagarPage() {
                           <Badge variant="outline" className="text-[10px] capitalize">
                             {debt.is_installment_credit ? 'Crédito en Cuotas' : debt.category.replace(/_/g, ' ')}
                           </Badge>
+                        </td>
+                        <td className="px-3 py-3 text-center whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              updateDebt(debt.id, {
+                                expense_type: debt.expense_type === 'business' ? 'personal' : 'business',
+                              })
+                            }
+                            className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border transition-all cursor-pointer font-medium hover:scale-105 active:scale-95 ${
+                              debt.expense_type === 'business'
+                                ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800'
+                                : 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800'
+                            }`}
+                            title="Haz clic para alternar entre Gasto Empresa o Personal"
+                          >
+                            {debt.expense_type === 'business' ? (
+                              <>
+                                <Building2 className="h-2.5 w-2.5" />
+                                <span>Empresa</span>
+                              </>
+                            ) : (
+                              <>
+                                <User className="h-2.5 w-2.5" />
+                                <span>Personal</span>
+                              </>
+                            )}
+                          </button>
                         </td>
                         <td className="px-3 py-3 text-right">
                           <span className="font-extrabold text-foreground block">
@@ -448,10 +493,20 @@ export default function CuentasPorPagarPage() {
                                 <span>Marcar Pagada</span>
                               </Button>
                             ) : (
-                              <span className="text-[10px] text-emerald-600 font-semibold flex items-center gap-1">
-                                <CheckCircle2 className="h-3 w-3" />
-                                <span>{formatDateCL(debt.paid_at)}</span>
-                              </span>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[10px] text-emerald-600 font-semibold flex items-center gap-1">
+                                  <CheckCircle2 className="h-3 w-3" />
+                                  <span>{formatDateCL(debt.paid_at)}</span>
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => unmarkDebtAsPaid(debt.id)}
+                                  className="text-[10px] text-muted-foreground hover:text-amber-600 underline ml-0.5"
+                                  title="Reabrir / Marcar como pendiente"
+                                >
+                                  Reabrir
+                                </button>
+                              </div>
                             )}
                             <Button
                               size="sm"

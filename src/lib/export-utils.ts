@@ -256,7 +256,7 @@ export function exportLibroComprasCSV(
   document.body.removeChild(link);
 }
 
-export function exportExpensesToExcel(receipts: ExpenseDocument[]) {
+export function exportExpensesToExcel(receipts: ExpenseDocument[], paidDebts?: AccountPayable[]) {
   const documentsData = receipts.map((r) => ({
     'ID Documento': r.id,
     'Fecha': formatDateCL(r.document_date),
@@ -310,6 +310,24 @@ export function exportExpensesToExcel(receipts: ExpenseDocument[]) {
 
   const wsItems = XLSX.utils.json_to_sheet(itemsData);
   XLSX.utils.book_append_sheet(workbook, wsItems, 'Detalle de Productos');
+
+  if (paidDebts && paidDebts.length > 0) {
+    const debtsData = paidDebts.map((d, idx) => ({
+      'N°': idx + 1,
+      'Acreedor / Proveedor': d.supplier_name,
+      'RUT': d.supplier_rut || '-',
+      'N° Documento': d.document_number || 'S/N',
+      'Categoría': d.category.replace(/_/g, ' '),
+      'Ámbito': d.expense_type === 'business' ? 'Empresa' : 'Personal',
+      'Monto Pagado (CLP)': d.paid_amount || d.installment_amount || d.amount,
+      'Fecha de Pago': d.paid_at ? formatDateCL(d.paid_at) : formatDateCL(d.due_date),
+      'Medio de Pago': d.payment_method || 'Transferencia',
+      'Detalle Cuota': d.is_installment_credit ? `Cuota ${d.installment_current || 1} de ${d.installment_total || 1}` : 'Pago Único',
+      'Notas': d.notes || '',
+    }));
+    const wsDebts = XLSX.utils.json_to_sheet(debtsData);
+    XLSX.utils.book_append_sheet(workbook, wsDebts, 'Deudas y Cuotas Pagadas');
+  }
 
   const dateStr = new Date().toISOString().split('T')[0];
   XLSX.writeFile(workbook, `reporte_gastos_boletas_${dateStr}.xlsx`);

@@ -31,12 +31,36 @@ import { useAuth } from '@/lib/store/auth-context';
 
 export default function ReceiptsListPage() {
   const router = useRouter();
-  const { receipts, deleteReceipt, approveReceipt } = useReceipts();
+  const { receipts, deleteReceipt, approveReceipt, debts } = useReceipts();
   const { activeOrgId } = useAuth();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
+
+  const scopedPaidDebts = useMemo(() => {
+    return debts.filter((d) => {
+      if (d.status !== 'paid') return false;
+      if (activeOrgId !== 'all') {
+        if (activeOrgId === 'org-personal') {
+          if (d.expense_type !== 'personal' && d.organization_id !== 'org-personal') return false;
+        } else {
+          if (d.organization_id && d.organization_id !== activeOrgId) return false;
+        }
+      }
+      return true;
+    });
+  }, [debts, activeOrgId]);
+
+  const paidDebtsBusiness = scopedPaidDebts
+    .filter((d) => d.expense_type === 'business')
+    .reduce((acc, d) => acc + (d.paid_amount || d.installment_amount || d.amount), 0);
+
+  const paidDebtsPersonal = scopedPaidDebts
+    .filter((d) => d.expense_type === 'personal')
+    .reduce((acc, d) => acc + (d.paid_amount || d.installment_amount || d.amount), 0);
+
+  const totalPaidDebts = paidDebtsBusiness + paidDebtsPersonal;
 
   const filteredReceipts = useMemo(() => {
     return receipts.filter((r) => {
@@ -85,8 +109,12 @@ export default function ReceiptsListPage() {
           <Card className="p-4 flex items-center justify-between">
             <div>
               <p className="text-xs text-muted-foreground font-medium">Total Filtrado</p>
-              <h3 className="text-xl font-bold text-foreground mt-0.5">{formatCLP(totalAmount)}</h3>
-              <p className="text-[11px] text-muted-foreground">{filteredReceipts.length} documentos</p>
+              <h3 className="text-xl font-bold text-foreground mt-0.5">{formatCLP(totalAmount + totalPaidDebts)}</h3>
+              <p className="text-[11px] text-muted-foreground">
+                {totalPaidDebts > 0
+                  ? `${filteredReceipts.length} boletas + ${scopedPaidDebts.length} deudas pagadas`
+                  : `${filteredReceipts.length} documentos`}
+              </p>
             </div>
             <div className="h-10 w-10 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-600 flex items-center justify-center">
               <Receipt className="h-5 w-5" />
@@ -96,8 +124,12 @@ export default function ReceiptsListPage() {
           <Card className="p-4 flex items-center justify-between">
             <div>
               <p className="text-xs text-muted-foreground font-medium">Gastos Empresa</p>
-              <h3 className="text-xl font-bold text-blue-600 mt-0.5">{formatCLP(totalBusiness)}</h3>
-              <p className="text-[11px] text-muted-foreground">Deducibles / Operacionales</p>
+              <h3 className="text-xl font-bold text-blue-600 mt-0.5">{formatCLP(totalBusiness + paidDebtsBusiness)}</h3>
+              <p className="text-[11px] text-muted-foreground">
+                {paidDebtsBusiness > 0
+                  ? `Boletas: ${formatCLP(totalBusiness)} • Cuotas: ${formatCLP(paidDebtsBusiness)}`
+                  : 'Deducibles / Operacionales'}
+              </p>
             </div>
             <div className="h-10 w-10 rounded-full bg-blue-50 dark:bg-blue-950 text-blue-600 flex items-center justify-center">
               <Building2 className="h-5 w-5" />
@@ -107,8 +139,12 @@ export default function ReceiptsListPage() {
           <Card className="p-4 flex items-center justify-between">
             <div>
               <p className="text-xs text-muted-foreground font-medium">Gastos Personales</p>
-              <h3 className="text-xl font-bold text-emerald-600 mt-0.5">{formatCLP(totalPersonal)}</h3>
-              <p className="text-[11px] text-muted-foreground">Gastos particulares</p>
+              <h3 className="text-xl font-bold text-emerald-600 mt-0.5">{formatCLP(totalPersonal + paidDebtsPersonal)}</h3>
+              <p className="text-[11px] text-muted-foreground">
+                {paidDebtsPersonal > 0
+                  ? `Boletas: ${formatCLP(totalPersonal)} • Cuotas: ${formatCLP(paidDebtsPersonal)}`
+                  : 'Gastos particulares'}
+              </p>
             </div>
             <div className="h-10 w-10 rounded-full bg-emerald-50 dark:bg-emerald-950 text-emerald-600 flex items-center justify-center">
               <User className="h-5 w-5" />

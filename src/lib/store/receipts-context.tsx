@@ -23,6 +23,7 @@ interface ReceiptsContextType {
   updateBudget: (budget: Partial<MonthlyBudget>) => void;
   addDebt: (newDebt: Omit<AccountPayable, 'id' | 'created_at' | 'updated_at' | 'status'>) => AccountPayable;
   markDebtAsPaid: (id: string, paymentMethod?: string) => void;
+  unmarkDebtAsPaid: (id: string) => void;
   deleteDebt: (id: string) => void;
   updateDebt: (id: string, fields: Partial<AccountPayable>) => void;
   resetToDemo: () => void;
@@ -338,12 +339,29 @@ export function ReceiptsProvider({ children }: { children: React.ReactNode }) {
     setDebts((prev) =>
       prev.map((d) => {
         if (d.id !== id) return d;
+        const paidAmount = d.is_installment_credit ? (d.installment_amount || d.amount) : d.amount;
         return {
           ...d,
           status: 'paid',
           paid_at: new Date().toISOString(),
-          paid_amount: d.amount,
+          paid_amount: paidAmount,
           payment_method: paymentMethod || 'Transferencia Bancaria',
+          updated_at: new Date().toISOString(),
+        };
+      })
+    );
+  };
+
+  const unmarkDebtAsPaid = (id: string) => {
+    setDebts((prev) =>
+      prev.map((d) => {
+        if (d.id !== id) return d;
+        return {
+          ...d,
+          status: computeDebtStatus(d.due_date, false),
+          paid_at: null,
+          paid_amount: null,
+          payment_method: null,
           updated_at: new Date().toISOString(),
         };
       })
@@ -404,6 +422,7 @@ export function ReceiptsProvider({ children }: { children: React.ReactNode }) {
         updateBudget,
         addDebt,
         markDebtAsPaid,
+        unmarkDebtAsPaid,
         deleteDebt,
         updateDebt,
         resetToDemo,

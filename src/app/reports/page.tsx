@@ -13,13 +13,41 @@ import { useAuth } from '@/lib/store/auth-context';
 import { FileSpreadsheet, Download, Filter, Calendar, BarChart3, Building2, User } from 'lucide-react';
 
 export default function ReportsPage() {
-  const { receipts, categories } = useReceipts();
+  const { receipts, categories, debts } = useReceipts();
   const { activeOrgId } = useAuth();
 
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [selectedType, setSelectedType] = useState('all');
+
+  const scopedPaidDebts = useMemo(() => {
+    return debts.filter((d) => {
+      if (d.status !== 'paid') return false;
+      if (activeOrgId !== 'all') {
+        if (activeOrgId === 'org-personal') {
+          if (d.expense_type !== 'personal' && d.organization_id !== 'org-personal') return false;
+        } else {
+          if (d.organization_id && d.organization_id !== activeOrgId) return false;
+        }
+      }
+      const paidDate = d.paid_at ? d.paid_at.split('T')[0] : d.due_date;
+      if (dateFrom && paidDate < dateFrom) return false;
+      if (dateTo && paidDate > dateTo) return false;
+      if (selectedType !== 'all' && d.expense_type !== selectedType) return false;
+      return true;
+    });
+  }, [debts, activeOrgId, dateFrom, dateTo, selectedType]);
+
+  const paidDebtsBusiness = scopedPaidDebts
+    .filter((d) => d.expense_type === 'business')
+    .reduce((acc, d) => acc + (d.paid_amount || d.installment_amount || d.amount), 0);
+
+  const paidDebtsPersonal = scopedPaidDebts
+    .filter((d) => d.expense_type === 'personal')
+    .reduce((acc, d) => acc + (d.paid_amount || d.installment_amount || d.amount), 0);
+
+  const totalPaidDebts = paidDebtsBusiness + paidDebtsPersonal;
 
   const filteredReceipts = useMemo(() => {
     return receipts.filter((r) => {
@@ -43,9 +71,13 @@ export default function ReportsPage() {
     });
   }, [receipts, activeOrgId, dateFrom, dateTo, selectedCategory, selectedType]);
 
-  const totalFiltered = filteredReceipts.reduce((acc, r) => acc + r.total_amount, 0);
-  const totalBusiness = filteredReceipts.reduce((acc, r) => acc + r.business_total, 0);
-  const totalPersonal = filteredReceipts.reduce((acc, r) => acc + r.personal_total, 0);
+  const receiptsSpent = filteredReceipts.reduce((acc, r) => acc + r.total_amount, 0);
+  const receiptsBusiness = filteredReceipts.reduce((acc, r) => acc + r.business_total, 0);
+  const receiptsPersonal = filteredReceipts.reduce((acc, r) => acc + r.personal_total, 0);
+
+  const totalFiltered = receiptsSpent + totalPaidDebts;
+  const totalBusiness = receiptsBusiness + paidDebtsBusiness;
+  const totalPersonal = receiptsPersonal + paidDebtsPersonal;
   const totalTax = filteredReceipts.reduce((acc, r) => acc + (r.tax_amount || 0), 0);
 
   return (
@@ -122,19 +154,31 @@ export default function ReportsPage() {
           <Card className="p-4">
             <span className="text-[11px] text-muted-foreground uppercase font-semibold">Total Seleccionado</span>
             <h3 className="text-xl font-bold text-foreground mt-1">{formatCLP(totalFiltered)}</h3>
-            <span className="text-[10px] text-muted-foreground">{filteredReceipts.length} documentos</span>
+            <span className="text-[10px] text-muted-foreground">
+              {totalPaidDebts > 0
+                ? `${filteredReceipts.length} boletas + ${scopedPaidDebts.length} deudas pagadas`
+                : `${filteredReceipts.length} documentos`}
+            </span>
           </Card>
 
           <Card className="p-4">
             <span className="text-[11px] text-blue-600 uppercase font-semibold">Gasto Empresa (Deducible)</span>
             <h3 className="text-xl font-bold text-blue-600 mt-1">{formatCLP(totalBusiness)}</h3>
-            <span className="text-[10px] text-muted-foreground">Base contable empresarial</span>
+            <span className="text-[10px] text-muted-foreground">
+              {paidDebtsBusiness > 0
+                ? `Boletas: ${formatCLP(receiptsBusiness)} • Cuotas: ${formatCLP(paidDebtsBusiness)}`
+                : 'Base contable empresarial'}
+            </span>
           </Card>
 
           <Card className="p-4">
             <span className="text-[11px] text-emerald-600 uppercase font-semibold">Gasto Personal</span>
             <h3 className="text-xl font-bold text-emerald-600 mt-1">{formatCLP(totalPersonal)}</h3>
-            <span className="text-[10px] text-muted-foreground">Gastos particulares</span>
+            <span className="text-[10px] text-muted-foreground">
+              {paidDebtsPersonal > 0
+                ? `Boletas: ${formatCLP(receiptsPersonal)} • Cuotas: ${formatCLP(paidDebtsPersonal)}`
+                : 'Gastos particulares'}
+            </span>
           </Card>
 
           <Card className="p-4">
@@ -149,7 +193,7 @@ export default function ReportsPage() {
           <div>
             <h3 className="font-bold text-base">Descargar Archivos de Exportación</h3>
             <p className="text-xs text-slate-300 mt-1 max-w-xl">
-              Genera el archivo Excel oficial con dos hojas completas: una con la cabecera de las boletas y otra con el desglose ítem por ítem.
+              Genera el archivo Excel oficial con hojas para boletas, detalle de productos y compromisos/deudas pagadas.
             </p>
           </div>
 
@@ -165,7 +209,7 @@ export default function ReportsPage() {
             </Button>
             <Button
               size="sm"
-              onClick={() => exportExpensesToExcel(filteredReceipts)}
+              onClick={() => exportExpensesToExcel(filteredReceipts, scopedPaidDebts)}
               className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 font-semibold shadow-md"
             >
               <FileSpreadsheet className="h-4 w-4" />
