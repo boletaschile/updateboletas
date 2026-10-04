@@ -231,8 +231,9 @@ export function ReceiptsProvider({ children }: { children: React.ReactNode }) {
         const remoteIds = new Set(remote.map((r) => r.id));
         const localOnly = localItems.filter((l) => !remoteIds.has(l.id));
         const results = await Promise.all(localOnly.map((l) => insertRemote(l)));
-        const uploaded = localOnly.filter((_, i) => results[i]);
-        apply([...remote, ...uploaded]);
+        // Nunca descartar datos locales: si una subida falla, el item se conserva
+        // en este dispositivo y se reintenta en la próxima carga.
+        apply([...remote, ...localOnly]);
         return results.every(Boolean);
       };
 
