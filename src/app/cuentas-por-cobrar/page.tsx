@@ -104,9 +104,15 @@ export default function CuentasPorCobrarPage() {
             Boleta Honorarios
           </Badge>
         );
+      case 'cotizacion_aprobada':
+        return (
+          <Badge className="bg-amber-500/15 text-amber-400 border-amber-500/30 text-xs">
+            Cotización Aprobada
+          </Badge>
+        );
       case 'orden_compra':
         return (
-          <Badge className="bg-amber-500/10 text-amber-400 border-amber-500/20 text-xs">
+          <Badge className="bg-cyan-500/10 text-cyan-400 border-cyan-500/20 text-xs">
             Orden de Compra
           </Badge>
         );
@@ -349,9 +355,10 @@ export default function CuentasPorCobrarPage() {
             >
               <option value="all">Todos los Documentos</option>
               <option value="factura_afecta">Facturas Afectas (19% IVA)</option>
+              <option value="cotizacion_aprobada">Cotizaciones Aprobadas</option>
+              <option value="orden_compra">Órdenes de Compra</option>
               <option value="factura_exenta">Facturas Exentas</option>
               <option value="boleta_honorarios">Boletas Honorarios</option>
-              <option value="orden_compra">Órdenes de Compra</option>
               <option value="sin_facturar">Sin Facturar aún</option>
             </select>
 

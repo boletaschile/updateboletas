@@ -21,7 +21,7 @@ export type DebtStatus = 'pending' | 'due_soon' | 'overdue' | 'paid';
 export type DebtCategory = 'factura_proveedor' | 'credito_bancario' | 'impuesto_f29' | 'previred' | 'servicio_suscripcion' | 'arriendo' | 'tarjeta_credito' | 'otro';
 
 export type ReceivableStatus = 'pending' | 'due_soon' | 'overdue' | 'collected';
-export type ReceivableDocumentType = 'factura_afecta' | 'factura_exenta' | 'boleta_honorarios' | 'orden_compra' | 'sin_facturar';
+export type ReceivableDocumentType = 'factura_afecta' | 'factura_exenta' | 'boleta_honorarios' | 'orden_compra' | 'cotizacion_aprobada' | 'sin_facturar';
 
 export interface Profile {
   id: string;

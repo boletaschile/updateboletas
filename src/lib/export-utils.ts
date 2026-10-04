@@ -84,6 +84,8 @@ export function exportReceivablesToExcel(
     switch (docType) {
       case 'factura_afecta':
         return 'Factura Afecta (19% IVA)';
+      case 'cotizacion_aprobada':
+        return 'Cotización Aprobada';
       case 'factura_exenta':
         return 'Factura Exenta';
       case 'boleta_honorarios':

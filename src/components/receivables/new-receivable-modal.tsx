@@ -65,7 +65,7 @@ export function NewReceivableModal({ isOpen, onClose }: NewReceivableModalProps)
   // Actualizar montos según tipo de documento
   const recalculateAmounts = (net: number, docType: ReceivableDocumentType) => {
     setNetAmount(net);
-    if (docType === 'factura_afecta') {
+    if (docType === 'factura_afecta' || docType === 'cotizacion_aprobada') {
       const tax = Math.round(net * 0.19);
       setTaxAmount(tax);
       setTotalAmount(net + tax);
@@ -92,7 +92,7 @@ export function NewReceivableModal({ isOpen, onClose }: NewReceivableModalProps)
   const handleTotalAmountDirectChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const total = parseInt(e.target.value.replace(/\D/g, ''), 10) || 0;
     setTotalAmount(total);
-    if (documentType === 'factura_afecta') {
+    if (documentType === 'factura_afecta' || documentType === 'cotizacion_aprobada') {
       const net = Math.round(total / 1.19);
       setNetAmount(net);
       setTaxAmount(total - net);
@@ -271,17 +271,18 @@ export function NewReceivableModal({ isOpen, onClose }: NewReceivableModalProps)
                 className="w-full bg-slate-800 border border-slate-700 rounded-md py-2 px-3 text-sm text-white focus:outline-none focus:border-emerald-500"
               >
                 <option value="factura_afecta">Factura Electrónica Afecta (19% IVA)</option>
+                <option value="cotizacion_aprobada">Cotización Aprobada por Cliente</option>
+                <option value="orden_compra">Orden de Compra (OC)</option>
                 <option value="factura_exenta">Factura Electrónica Exenta</option>
                 <option value="boleta_honorarios">Boleta de Honorarios (con Retención)</option>
-                <option value="orden_compra">Orden de Compra / Cotización Aceptada</option>
                 <option value="sin_facturar">Trabajo Realizado / Sin Facturar aún</option>
               </select>
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-300">N° Folio / Factura (Opcional)</Label>
+              <Label className="text-xs font-medium text-slate-300">N° Folio / Factura / Cotización (Opcional)</Label>
               <Input
-                placeholder="Ej: F-1045, OC-892"
+                placeholder="Ej: F-363, COT-5747, OC-892"
                 value={invoiceNumber}
                 onChange={(e) => setInvoiceNumber(e.target.value)}
                 className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500 focus:border-emerald-500"
@@ -297,7 +298,7 @@ export function NewReceivableModal({ isOpen, onClose }: NewReceivableModalProps)
                 Desglose Monetario (CLP)
               </span>
               <Badge variant="outline" className="text-xs border-emerald-500/40 text-emerald-400 bg-emerald-500/10">
-                {documentType === 'factura_afecta'
+                {documentType === 'factura_afecta' || documentType === 'cotizacion_aprobada'
                   ? 'IVA Débito Fiscal 19% Automático'
                   : documentType === 'boleta_honorarios'
                   ? 'Retención 13.75%'
