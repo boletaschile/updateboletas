@@ -11,7 +11,9 @@ import { useReceipts } from '@/lib/store/receipts-context';
 import { useAuth } from '@/lib/store/auth-context';
 import { BankTransaction } from '@/types';
 import { DEMO_BANK_TRANSACTIONS } from '@/lib/bank/demo-bank-statement';
+import { DEMO_RECEIPTS } from '@/lib/store/demo-data';
 import { reconcileTransactions } from '@/lib/bank/reconciliation-service';
+import { parseBankStatementFile } from '@/lib/bank/bank-statement-parser';
 import { formatCLP, formatDateCL } from '@/lib/utils';
 import { exportBankReconciliationExcel } from '@/lib/export-utils';
 import {
@@ -29,6 +31,7 @@ import {
   RefreshCw,
   PlusCircle,
   Eye,
+  Check,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -42,59 +45,120 @@ export default function ConciliacionBancariaPage() {
   const [hasReconciled, setHasReconciled] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
 
-  // Comprobantes filtrados por organización activa
+  // Comprobantes filtrados según la organización / perfil activo
   const scopedReceipts = useMemo(() => {
     return receipts.filter((r) => {
-      if (activeOrgId !== 'all') {
-        if (activeOrgId === 'org-personal') {
-          if (r.expense_type !== 'personal' && r.organization_id !== 'org-personal') return false;
-        } else {
-          if (r.organization_id && r.organization_id !== activeOrgId) return false;
-        }
+      if (activeOrgId === 'all') return true;
+      if (activeOrg?.type === 'personal' || activeOrgId === 'org-personal') {
+        return (
+          r.expense_type === 'personal' ||
+          r.organization_id === activeOrgId ||
+          r.organization_id === 'org-personal' ||
+          !r.organization_id
+        );
       }
-      return true;
+      return (
+        r.organization_id === activeOrgId ||
+        (r.expense_type === 'business' && (!r.organization_id || r.organization_id === 'org-empresa-1'))
+      );
     });
-  }, [receipts, activeOrgId]);
+  }, [receipts, activeOrgId, activeOrg]);
 
-  // Transacciones bancarias filtradas por organización activa
+  // Transacciones bancarias para la vista activa:
+  // Se muestran las transacciones vinculadas a la organización activa, o las transacciones de la cartola cargada/demo
   const orgTransactions = useMemo(() => {
     return transactions.filter((t) => {
-      if (activeOrgId !== 'all') {
-        if (t.organization_id && t.organization_id !== activeOrgId) return false;
+      if (activeOrgId === 'all') return true;
+      // Si la transacción no tiene organización asignada o coincide con la activa
+      if (!t.organization_id || t.organization_id === activeOrgId) return true;
+      // Compatibilidad con perfiles demo
+      if (activeOrg?.type === 'personal' && (t.organization_id === 'org-personal' || t.id.startsWith('btx-'))) {
+        return true;
       }
-      return true;
+      if (activeOrg?.type === 'business' && (t.organization_id === 'org-empresa-1' || t.id.startsWith('btx-'))) {
+        return true;
+      }
+      return false;
     });
-  }, [transactions, activeOrgId]);
+  }, [transactions, activeOrgId, activeOrg]);
 
-  // Ejecutar conciliación automática
+  // Ejecutar conciliación automática con IA
   const handleAutoReconcile = () => {
     setIsReconciling(true);
+    setUploadError(null);
+    setUploadSuccess(null);
+
     setTimeout(() => {
-      const reconciled = reconcileTransactions(transactions, scopedReceipts);
+      // Priorizar boletas reales del usuario en el perfil activo.
+      // Si el usuario aún no tiene boletas y está probando la cartola demo,
+      // cruzar contra DEMO_RECEIPTS para demostrar el cotejo inteligente.
+      const hasUserReceipts = scopedReceipts.length > 0;
+      const isDemoSession = transactions.some((t) => t.id.startsWith('btx-'));
+      const receiptsToMatch = hasUserReceipts
+        ? scopedReceipts
+        : (isDemoSession ? DEMO_RECEIPTS : []);
+
+      const reconciled = reconcileTransactions(transactions, receiptsToMatch);
       setTransactions(reconciled);
       setIsReconciling(false);
       setHasReconciled(true);
     }, 600);
   };
 
-  // Cargar cartola bancaria desde archivo o demo
+  // Cargar cartola bancaria demo
   const handleLoadDemoStatement = () => {
-    setTransactions(DEMO_BANK_TRANSACTIONS);
+    setTransactions(
+      DEMO_BANK_TRANSACTIONS.map((t) => ({
+        ...t,
+        organization_id: activeOrgId !== 'all' ? activeOrgId : t.organization_id,
+        status: 'unmatched',
+        matched_receipt_id: null,
+        matched_receipt: null,
+        match_confidence: 0,
+      }))
+    );
+    setBankFile(null);
+    setUploadError(null);
+    setUploadSuccess('Cartola de demostración cargada con éxito (10 movimientos).');
     setHasReconciled(false);
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Cargar cartola desde archivo Excel (.xlsx, .xls) o CSV
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       setBankFile(file);
-      // Simular lectura de cartola
-      setTransactions(DEMO_BANK_TRANSACTIONS);
-      setHasReconciled(false);
+      setUploadError(null);
+      setUploadSuccess(null);
+
+      try {
+        const parsed = await parseBankStatementFile(
+          file,
+          activeOrgId !== 'all' ? activeOrgId : undefined
+        );
+
+        if (parsed.transactions.length === 0) {
+          setUploadError(
+            'No se encontraron filas con cargos bancarios válidos en el archivo. Verifica que contenga columnas de Fecha, Glosa/Descripción y Cargos/Débitos.'
+          );
+        } else {
+          setTransactions(parsed.transactions);
+          setHasReconciled(false);
+          setUploadSuccess(
+            `Se importaron ${parsed.transactions.length} movimientos bancarios de ${parsed.bankName} correctamente.`
+          );
+        }
+      } catch (err: any) {
+        console.error('Error al procesar cartola bancaria:', err);
+        setUploadError(err.message || 'Error al procesar el archivo de cartola bancaria.');
+      }
     }
   };
 
-  // Aceptar sugerencia
+  // Aceptar sugerencia de cotejo
   const handleAcceptSuggestion = (txId: string) => {
     setTransactions((prev) =>
       prev.map((t) => (t.id === txId ? { ...t, status: 'matched' } : t))
@@ -130,13 +194,15 @@ export default function ConciliacionBancariaPage() {
     );
   };
 
-  // Métricas de Conciliación (Scoped)
+  // Métricas de Conciliación basadas en orgTransactions
   const totalBankCharges = orgTransactions.reduce((acc, t) => acc + t.amount, 0);
   const matchedTransactions = orgTransactions.filter((t) => t.status === 'matched');
   const matchedAmount = matchedTransactions.reduce((acc, t) => acc + t.amount, 0);
+  const suggestedTransactions = orgTransactions.filter((t) => t.status === 'suggested');
+  const suggestedAmount = suggestedTransactions.reduce((acc, t) => acc + t.amount, 0);
   const pendingTransactions = orgTransactions.filter((t) => t.status === 'unmatched');
   const pendingAmount = pendingTransactions.reduce((acc, t) => acc + t.amount, 0);
-  const reconciliationRate = Math.round((matchedAmount / (totalBankCharges || 1)) * 100);
+  const reconciliationRate = totalBankCharges > 0 ? Math.round((matchedAmount / totalBankCharges) * 100) : 0;
 
   // Filtrado de la tabla
   const filteredTransactions = useMemo(() => {
@@ -181,7 +247,12 @@ export default function ConciliacionBancariaPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => exportBankReconciliationExcel(transactions, activeOrg)}
+              onClick={() =>
+                exportBankReconciliationExcel(
+                  filteredTransactions.length > 0 ? filteredTransactions : orgTransactions,
+                  activeOrg
+                )
+              }
               className="bg-white/10 hover:bg-white/20 text-white border-white/20 gap-1.5 text-xs"
             >
               <FileSpreadsheet className="h-4 w-4" />
@@ -246,6 +317,20 @@ export default function ConciliacionBancariaPage() {
           </div>
         </Card>
 
+        {/* Notificaciones de subida */}
+        {uploadSuccess && (
+          <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-800 dark:text-emerald-300 flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 text-emerald-600 flex-shrink-0" />
+            <span>{uploadSuccess}</span>
+          </div>
+        )}
+        {uploadError && (
+          <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-xs text-red-800 dark:text-red-300 flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
+            <span>{uploadError}</span>
+          </div>
+        )}
+
         {/* KPIs de Conciliación */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card className="p-4 border-l-4 border-l-slate-600">
@@ -253,7 +338,7 @@ export default function ConciliacionBancariaPage() {
               Total Cargos en el Banco
             </span>
             <h3 className="text-2xl font-black text-foreground mt-1">{formatCLP(totalBankCharges)}</h3>
-            <span className="text-[11px] text-muted-foreground">{transactions.length} movimientos en cartola</span>
+            <span className="text-[11px] text-muted-foreground">{orgTransactions.length} movimientos en cartola</span>
           </Card>
 
           <Card className="p-4 border-l-4 border-l-emerald-600 bg-emerald-50/20 dark:bg-emerald-950/20">
@@ -299,9 +384,9 @@ export default function ConciliacionBancariaPage() {
           </Card>
         </div>
 
-        {/* Alerta de Conciliación */}
-        {!hasReconciled && (
-          <div className="p-4 rounded-xl bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 flex items-center justify-between gap-4 text-xs">
+        {/* Alerta de Estado de Conciliación */}
+        {!hasReconciled ? (
+          <div className="p-4 rounded-xl bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs">
             <div className="flex items-center gap-3">
               <Sparkles className="h-5 w-5 text-blue-600 flex-shrink-0" />
               <div>
@@ -309,21 +394,60 @@ export default function ConciliacionBancariaPage() {
                   Cartola lista para cotejar con las boletas registradas
                 </p>
                 <p className="text-blue-800 dark:text-blue-300 text-[11px]">
-                  Presiona &quot;Conciliar Automáticamente&quot; para cruzar montos, fechas y glosas bancarias en segundos.
+                  Presiona &quot;Conciliar Automáticamente&quot; para cruzar montos, fechas y glosas bancarias con inteligencia artificial.
                 </p>
               </div>
             </div>
-            <Button size="sm" onClick={handleAutoReconcile} className="gap-1.5 text-xs shadow-sm">
+            <Button size="sm" onClick={handleAutoReconcile} disabled={isReconciling} className="gap-1.5 text-xs shadow-sm flex-shrink-0">
               <Sparkles className="h-3.5 w-3.5" />
-              <span>Ejecutar Cotejo IA</span>
+              <span>{isReconciling ? 'Cotejando con IA...' : 'Ejecutar Cotejo IA'}</span>
             </Button>
+          </div>
+        ) : (
+          <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs">
+            <div className="flex items-center gap-3">
+              <CheckCircle2 className="h-5 w-5 text-emerald-600 flex-shrink-0" />
+              <div>
+                <p className="font-bold text-emerald-950 dark:text-emerald-200">
+                  ¡Conciliación bancaria completada exitosamente!
+                </p>
+                <p className="text-emerald-800 dark:text-emerald-300 text-[11px]">
+                  {matchedTransactions.length} cargos respaldados con boleta ({formatCLP(matchedAmount)}).
+                  {suggestedTransactions.length > 0 && ` ${suggestedTransactions.length} sugerencias por confirmar.`}
+                  {pendingTransactions.length > 0 && ` Quedan ${pendingTransactions.length} cargos sin respaldo tributario.`}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              {pendingTransactions.length > 0 && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setFilterStatus('unmatched')}
+                  className="gap-1 text-xs text-red-700 border-red-300 hover:bg-red-50 dark:hover:bg-red-950/40"
+                >
+                  <AlertCircle className="h-3 w-3" />
+                  <span>Ver {pendingTransactions.length} sin boleta</span>
+                </Button>
+              )}
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={handleAutoReconcile}
+                disabled={isReconciling}
+                className="gap-1 text-xs text-blue-600 hover:bg-blue-50"
+              >
+                <RefreshCw className="h-3 w-3" />
+                <span>Re-ejecutar</span>
+              </Button>
+            </div>
           </div>
         )}
 
         {/* Barra de Filtros */}
         <Card className="p-4">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
-            <div className="relative flex-1 max-w-sm">
+            <div className="relative flex-1 max-w-sm w-full">
               <Search className="h-4 w-4 absolute left-3 top-3 text-muted-foreground" />
               <Input
                 placeholder="Buscar por glosa bancaria o N° operación..."
@@ -333,23 +457,23 @@ export default function ConciliacionBancariaPage() {
               />
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
               <select
                 value={filterStatus}
                 onChange={(e) => setFilterStatus(e.target.value)}
                 className="h-10 px-3 rounded-lg border border-input bg-background text-xs"
               >
-                <option value="all">Todos los movimientos ({transactions.length})</option>
-                <option value="matched">🟢 Conciliados ({transactions.filter((t) => t.status === 'matched').length})</option>
-                <option value="suggested">🟡 Coincidencias Sugeridas ({transactions.filter((t) => t.status === 'suggested').length})</option>
-                <option value="unmatched">🔴 Sin Boleta ({transactions.filter((t) => t.status === 'unmatched').length})</option>
+                <option value="all">Todos los movimientos ({orgTransactions.length})</option>
+                <option value="matched">🟢 Conciliados ({matchedTransactions.length})</option>
+                <option value="suggested">🟡 Coincidencias Sugeridas ({suggestedTransactions.length})</option>
+                <option value="unmatched">🔴 Sin Boleta ({pendingTransactions.length})</option>
               </select>
             </div>
           </div>
         </Card>
 
         {/* Tabla de Cotejo Bancario */}
-        <Card className="overflow-hidden">
+        <Card className="overflow-hidden shadow-sm">
           <CardHeader className="py-3 px-4 bg-muted/40 border-b flex flex-row items-center justify-between">
             <span className="text-xs font-bold text-foreground">
               Movimientos Bancarios & Cotejo de Comprobantes
@@ -372,103 +496,111 @@ export default function ConciliacionBancariaPage() {
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {filteredTransactions.map((tx) => {
-                  const receipt = tx.matched_receipt;
-                  const isMatched = tx.status === 'matched';
-                  const isSuggested = tx.status === 'suggested';
-                  const isUnmatched = tx.status === 'unmatched';
+                {filteredTransactions.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
+                      No se encontraron movimientos bancarios con los criterios de búsqueda actuales.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredTransactions.map((tx) => {
+                    const receipt = tx.matched_receipt;
+                    const isMatched = tx.status === 'matched';
+                    const isSuggested = tx.status === 'suggested';
+                    const isUnmatched = tx.status === 'unmatched';
 
-                  return (
-                    <tr key={tx.id} className="hover:bg-muted/30 transition-colors">
-                      <td className="px-3 py-3 font-medium whitespace-nowrap">
-                        {formatDateCL(tx.date)}
-                      </td>
-                      <td className="px-3 py-3 font-medium max-w-[240px] truncate" title={tx.description}>
-                        <span className="text-foreground block font-semibold">{tx.description}</span>
-                        <span className="text-[10px] text-muted-foreground">{tx.bank_name || 'Banco'}</span>
-                      </td>
-                      <td className="px-3 py-3 font-mono text-[11px] text-muted-foreground">
-                        {tx.operation_number || '-'}
-                      </td>
-                      <td className="px-3 py-3 text-right font-black text-foreground">
-                        {formatCLP(tx.amount)}
-                      </td>
-                      <td className="px-3 py-3 text-center whitespace-nowrap">
-                        {isMatched ? (
-                          <Badge variant="success" className="text-[10px] gap-1">
-                            <CheckCircle2 className="h-3 w-3" />
-                            <span>Conciliado</span>
-                          </Badge>
-                        ) : isSuggested ? (
-                          <Badge variant="warning" className="text-[10px] gap-1">
-                            <Sparkles className="h-3 w-3" />
-                            <span>Sugerido ({Math.round((tx.match_confidence || 0) * 100)}%)</span>
-                          </Badge>
-                        ) : (
-                          <Badge variant="destructive" className="text-[10px] gap-1">
-                            <AlertCircle className="h-3 w-3" />
-                            <span>Sin Boleta</span>
-                          </Badge>
-                        )}
-                      </td>
-                      <td className="px-3 py-3 max-w-[220px]">
-                        {receipt ? (
-                          <div className="truncate">
-                            <p className="font-semibold text-foreground truncate">{receipt.merchant_name}</p>
-                            <p className="text-[10px] text-muted-foreground">
-                              {receipt.receipt_number || 'S/N'} • {formatCLP(receipt.total_amount)}
-                            </p>
-                          </div>
-                        ) : (
-                          <span className="text-[11px] text-muted-foreground italic">
-                            Pendiente de subir comprobante
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-3 py-3 text-right whitespace-nowrap">
-                        <div className="flex items-center justify-end gap-1.5">
-                          {isSuggested && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleAcceptSuggestion(tx.id)}
-                              className="h-7 text-[10px] px-2 border-emerald-500 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50"
-                            >
-                              <CheckCircle2 className="h-3 w-3 mr-1" />
-                              <span>Aceptar</span>
-                            </Button>
+                    return (
+                      <tr key={tx.id} className="hover:bg-muted/30 transition-colors">
+                        <td className="px-3 py-3 font-medium whitespace-nowrap">
+                          {formatDateCL(tx.date)}
+                        </td>
+                        <td className="px-3 py-3 font-medium max-w-[240px] truncate" title={tx.description}>
+                          <span className="text-foreground block font-semibold truncate">{tx.description}</span>
+                          <span className="text-[10px] text-muted-foreground">{tx.bank_name || 'Banco'}</span>
+                        </td>
+                        <td className="px-3 py-3 font-mono text-[11px] text-muted-foreground">
+                          {tx.operation_number || '-'}
+                        </td>
+                        <td className="px-3 py-3 text-right font-black text-foreground whitespace-nowrap">
+                          {formatCLP(tx.amount)}
+                        </td>
+                        <td className="px-3 py-3 text-center whitespace-nowrap">
+                          {isMatched ? (
+                            <Badge variant="success" className="text-[10px] gap-1">
+                              <CheckCircle2 className="h-3 w-3" />
+                              <span>Conciliado</span>
+                            </Badge>
+                          ) : isSuggested ? (
+                            <Badge variant="warning" className="text-[10px] gap-1">
+                              <Sparkles className="h-3 w-3" />
+                              <span>Sugerido ({Math.round((tx.match_confidence || 0) * 100)}%)</span>
+                            </Badge>
+                          ) : (
+                            <Badge variant="destructive" className="text-[10px] gap-1">
+                              <AlertCircle className="h-3 w-3" />
+                              <span>Sin Boleta</span>
+                            </Badge>
                           )}
-
-                          {isUnmatched && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleCreateReceiptFromBank(tx)}
-                              className="h-7 text-[10px] px-2 text-blue-600 hover:bg-blue-50"
-                              title="Crear registro de gasto a partir del cargo"
-                            >
-                              <PlusCircle className="h-3 w-3 mr-1" />
-                              <span>Crear Gasto</span>
-                            </Button>
+                        </td>
+                        <td className="px-3 py-3 max-w-[220px]">
+                          {receipt ? (
+                            <div className="truncate">
+                              <p className="font-semibold text-foreground truncate">{receipt.merchant_name}</p>
+                              <p className="text-[10px] text-muted-foreground">
+                                {receipt.receipt_number || 'S/N'} • {formatCLP(receipt.total_amount)}
+                              </p>
+                            </div>
+                          ) : (
+                            <span className="text-[11px] text-muted-foreground italic">
+                              Pendiente de subir comprobante
+                            </span>
                           )}
-
-                          {receipt && (
-                            <Link href={`/receipts/${receipt.id}`}>
+                        </td>
+                        <td className="px-3 py-3 text-right whitespace-nowrap">
+                          <div className="flex items-center justify-end gap-1.5">
+                            {isSuggested && (
                               <Button
                                 size="sm"
-                                variant="ghost"
-                                className="h-7 w-7 p-0 text-blue-600 hover:bg-blue-50"
-                                title="Ver boleta vinculada"
+                                variant="outline"
+                                onClick={() => handleAcceptSuggestion(tx.id)}
+                                className="h-7 text-[10px] px-2 border-emerald-500 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50"
                               >
-                                <Eye className="h-3.5 w-3.5" />
+                                <CheckCircle2 className="h-3 w-3 mr-1" />
+                                <span>Aceptar</span>
                               </Button>
-                            </Link>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
+                            )}
+
+                            {isUnmatched && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleCreateReceiptFromBank(tx)}
+                                className="h-7 text-[10px] px-2 text-blue-600 hover:bg-blue-50"
+                                title="Crear registro de gasto a partir del cargo"
+                              >
+                                <PlusCircle className="h-3 w-3 mr-1" />
+                                <span>Crear Gasto</span>
+                              </Button>
+                            )}
+
+                            {receipt && (
+                              <Link href={`/receipts/${receipt.id}`}>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-7 w-7 p-0 text-blue-600 hover:bg-blue-50"
+                                  title="Ver boleta vinculada"
+                                >
+                                  <Eye className="h-3.5 w-3.5" />
+                                </Button>
+                              </Link>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>

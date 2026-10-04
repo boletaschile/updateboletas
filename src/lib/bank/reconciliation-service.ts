@@ -17,10 +17,19 @@ function normalizeString(str: string): string {
  */
 function getDateDifferenceInDays(date1: string, date2: string): number {
   try {
-    const d1 = new Date(date1).getTime();
-    const d2 = new Date(date2).getTime();
-    if (isNaN(d1) || isNaN(d2)) return 999;
-    return Math.abs(Math.round((d1 - d2) / (1000 * 60 * 60 * 24)));
+    const clean1 = String(date1 || '').split('T')[0];
+    const clean2 = String(date2 || '').split('T')[0];
+    const [y1, m1, d1] = clean1.split('-').map(Number);
+    const [y2, m2, d2] = clean2.split('-').map(Number);
+    if (!y1 || !m1 || !d1 || !y2 || !m2 || !d2) {
+      const t1 = new Date(date1).getTime();
+      const t2 = new Date(date2).getTime();
+      if (isNaN(t1) || isNaN(t2)) return 999;
+      return Math.abs(Math.round((t1 - t2) / (1000 * 60 * 60 * 24)));
+    }
+    const utc1 = Date.UTC(y1, m1 - 1, d1);
+    const utc2 = Date.UTC(y2, m2 - 1, d2);
+    return Math.abs(Math.round((utc1 - utc2) / (1000 * 60 * 60 * 24)));
   } catch {
     return 999;
   }
