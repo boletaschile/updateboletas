@@ -1,6 +1,8 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { MonthSelector } from '@/components/ui/month-selector';
+import { ALL_MONTHS, currentMonthKey, formatMonthLabel, monthKeyOf } from '@/lib/month-utils';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AppLayout } from '@/components/layout/app-layout';
@@ -37,10 +39,24 @@ export default function ReceiptsListPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [selectedMonth, setSelectedMonth] = useState<string>(currentMonthKey());
+
+  // Recordar el mes elegido entre visitas
+  useEffect(() => {
+    const saved = localStorage.getItem('subeboletas_selected_month_v1');
+    if (saved) setSelectedMonth(saved);
+  }, []);
+  useEffect(() => {
+    localStorage.setItem('subeboletas_selected_month_v1', selectedMonth);
+  }, [selectedMonth]);
+
+  const inSelectedMonth = (value?: string | null) =>
+    selectedMonth === ALL_MONTHS || monthKeyOf(value) === selectedMonth;
 
   const scopedPaidDebts = useMemo(() => {
     return debts.filter((d) => {
       if (d.status !== 'paid') return false;
+      if (!inSelectedMonth(d.paid_at || d.due_date)) return false;
       if (activeOrgId !== 'all') {
         if (activeOrgId === 'org-personal') {
           if (d.expense_type !== 'personal' && d.organization_id !== 'org-personal') return false;
@@ -50,7 +66,8 @@ export default function ReceiptsListPage() {
       }
       return true;
     });
-  }, [debts, activeOrgId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debts, activeOrgId, selectedMonth]);
 
   const paidDebtsBusiness = scopedPaidDebts
     .filter((d) => d.expense_type === 'business')
@@ -62,16 +79,30 @@ export default function ReceiptsListPage() {
 
   const totalPaidDebts = paidDebtsBusiness + paidDebtsPersonal;
 
-  const filteredReceipts = useMemo(() => {
+  // Boletas de la organización activa (antes de filtrar por mes), para contar por mes
+  const orgReceipts = useMemo(() => {
     return receipts.filter((r) => {
-      // Filtro por organización activa
-      if (activeOrgId !== 'all') {
-        if (activeOrgId === 'org-personal') {
-          if (r.expense_type !== 'personal' && r.organization_id !== 'org-personal') return false;
-        } else {
-          if (r.organization_id && r.organization_id !== activeOrgId) return false;
-        }
+      if (activeOrgId === 'all') return true;
+      if (activeOrgId === 'org-personal') {
+        return !(r.expense_type !== 'personal' && r.organization_id !== 'org-personal');
       }
+      return !(r.organization_id && r.organization_id !== activeOrgId);
+    });
+  }, [receipts, activeOrgId]);
+
+  const monthCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    orgReceipts.forEach((r) => {
+      const k = monthKeyOf(r.document_date);
+      if (k) counts[k] = (counts[k] || 0) + 1;
+    });
+    return counts;
+  }, [orgReceipts]);
+
+  const filteredReceipts = useMemo(() => {
+    return orgReceipts.filter((r) => {
+      // Filtro por mes
+      if (!inSelectedMonth(r.document_date)) return false;
 
       // Búsqueda por texto
       const term = searchTerm.toLowerCase();
@@ -90,7 +121,10 @@ export default function ReceiptsListPage() {
 
       return matchSearch && matchType && matchStatus;
     });
-  }, [receipts, activeOrgId, searchTerm, filterType, filterStatus]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orgReceipts, selectedMonth, searchTerm, filterType, filterStatus]);
+
+  const otherMonthsCount = orgReceipts.length - (selectedMonth === ALL_MONTHS ? 0 : monthCounts[selectedMonth] || 0);
 
   // Métricas rápidas del listado filtrado
   const totalAmount = filteredReceipts.reduce((acc, r) => acc + r.total_amount, 0);
@@ -163,6 +197,19 @@ export default function ReceiptsListPage() {
           </Card>
         </div>
 
+        {/* Período: navegación por mes */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <MonthSelector value={selectedMonth} onChange={setSelectedMonth} monthCounts={monthCounts} />
+          <p className="text-xs text-muted-foreground">
+            {selectedMonth === ALL_MONTHS ? 'Mostrando todo el historial' : `Mostrando ${formatMonthLabel(selectedMonth)}`}
+            {' · '}
+            {filteredReceipts.length} {filteredReceipts.length === 1 ? 'boleta' : 'boletas'}
+            {pendingReviewCount > 0 && (
+              <span className="text-amber-600 font-medium"> · {pendingReviewCount} por revisar</span>
+            )}
+          </p>
+        </div>
+
         {/* Barra de Búsqueda, Filtros y Exportación */}
         <Card className="p-4">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
@@ -219,7 +266,7 @@ export default function ReceiptsListPage() {
                 <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" />
                 <span>Exportar Excel</span>
               </Button>
-              <Link href="/receipts/new">
+              <Link href={selectedMonth !== ALL_MONTHS ? `/receipts/new?month=${selectedMonth}` : '/receipts/new'}>
                 <Button size="sm" className="gap-1.5 text-xs">
                   <PlusCircle className="h-3.5 w-3.5" />
                   <span>Nueva Boleta</span>
@@ -250,7 +297,20 @@ export default function ReceiptsListPage() {
                 {filteredReceipts.length === 0 ? (
                   <tr>
                     <td colSpan={9} className="py-12 text-center text-muted-foreground">
-                      No se encontraron boletas con los filtros seleccionados.
+                      {selectedMonth !== ALL_MONTHS && otherMonthsCount > 0 ? (
+                        <div className="space-y-2">
+                          <p>
+                            No hay boletas en {formatMonthLabel(selectedMonth)}. Tienes {otherMonthsCount} en otros meses.
+                          </p>
+                          <Button variant="outline" size="sm" className="text-xs" onClick={() => setSelectedMonth(ALL_MONTHS)}>
+                            Ver todos los meses
+                          </Button>
+                        </div>
+                      ) : selectedMonth !== ALL_MONTHS ? (
+                        <p>Aún no hay boletas en {formatMonthLabel(selectedMonth)}. Usa el botón Nueva Boleta para subir la primera.</p>
+                      ) : (
+                        'No se encontraron boletas con los filtros seleccionados.'
+                      )}
                     </td>
                   </tr>
                 ) : (

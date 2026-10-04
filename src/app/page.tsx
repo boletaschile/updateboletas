@@ -1,7 +1,9 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
+import { MonthSelector } from '@/components/ui/month-selector';
+import { ALL_MONTHS, currentMonthKey, formatMonthLabel, monthKeyOf } from '@/lib/month-utils';
 import { AppLayout } from '@/components/layout/app-layout';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -62,8 +64,21 @@ export default function DashboardPage() {
   const pendingReceivables = useMemo(() => scopedReceivables.filter((r) => r.status !== 'collected'), [scopedReceivables]);
   const totalPendingReceivable = useMemo(() => pendingReceivables.reduce((acc, r) => acc + r.total_amount, 0), [pendingReceivables]);
 
-  // Métricas del mes actual filtradas por la empresa o perfil seleccionado
-  const currentMonthReceipts = useMemo(() => {
+  const [selectedMonth, setSelectedMonth] = useState<string>(currentMonthKey());
+
+  useEffect(() => {
+    const saved = localStorage.getItem('subeboletas_selected_month_v1');
+    if (saved) setSelectedMonth(saved);
+  }, []);
+  useEffect(() => {
+    localStorage.setItem('subeboletas_selected_month_v1', selectedMonth);
+  }, [selectedMonth]);
+
+  const inSelectedMonth = (value?: string | null) =>
+    selectedMonth === ALL_MONTHS || monthKeyOf(value) === selectedMonth;
+
+  // Boletas de la organización activa
+  const orgReceipts = useMemo(() => {
     return receipts.filter((r) => {
       if (r.status === 'rejected') return false;
       if (activeOrgId === 'all') return true;
@@ -74,6 +89,20 @@ export default function DashboardPage() {
     });
   }, [receipts, activeOrgId]);
 
+  const monthCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    orgReceipts.forEach((r) => {
+      const k = monthKeyOf(r.document_date);
+      if (k) counts[k] = (counts[k] || 0) + 1;
+    });
+    return counts;
+  }, [orgReceipts]);
+
+  // Métricas del mes seleccionado filtradas por la empresa o perfil seleccionado
+  const currentMonthReceipts = useMemo(() => {
+    return orgReceipts.filter((r) => inSelectedMonth(r.document_date));
+  }, [orgReceipts, selectedMonth]);
+
   // Deudas y Compromisos filtrados por la empresa seleccionada
   const scopedDebts = useMemo(() => {
     return debts.filter((d) => {
@@ -83,8 +112,10 @@ export default function DashboardPage() {
     });
   }, [debts, activeOrgId]);
 
-  // Compromisos y deudas marcadas como pagadas (liquidadas)
-  const paidDebts = useMemo(() => scopedDebts.filter((d) => d.status === 'paid'), [scopedDebts]);
+  // Compromisos y deudas marcadas como pagadas (liquidadas) en el mes seleccionado
+  const paidDebts = useMemo(() => {
+    return scopedDebts.filter((d) => d.status === 'paid' && inSelectedMonth(d.paid_at || d.due_date));
+  }, [scopedDebts, selectedMonth]);
 
   const paidDebtsBusiness = useMemo(() => {
     return paidDebts
@@ -239,7 +270,7 @@ export default function DashboardPage() {
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <Badge className="bg-blue-500/20 text-blue-200 border-blue-400/30 text-xs">
-                Período: {currentPeriodName}
+                Período: {selectedMonth === ALL_MONTHS ? 'Historial Completo' : formatMonthLabel(selectedMonth)}
               </Badge>
               <Badge className="bg-emerald-500/20 text-emerald-200 border-emerald-400/30 text-xs">
                 Chile (CLP)
@@ -260,11 +291,25 @@ export default function DashboardPage() {
                 <span>Cuentas por Cobrar</span>
               </Button>
             </Link>
-            <Link href="/receipts/new">
+            <Link href={selectedMonth !== ALL_MONTHS ? `/receipts/new?month=${selectedMonth}` : '/receipts/new'}>
               <Button className="bg-white text-slate-950 hover:bg-slate-100 gap-2 font-semibold shadow-md text-xs">
                 <PlusCircle className="h-4 w-4 text-blue-600" />
                 <span>Nueva Boleta</span>
               </Button>
+            </Link>
+          </div>
+        </div>
+
+        {/* Barra de Período Mensual del Dashboard */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card p-3 rounded-xl border border-border shadow-sm">
+          <MonthSelector value={selectedMonth} onChange={setSelectedMonth} monthCounts={monthCounts} />
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span>
+              {selectedMonth === ALL_MONTHS ? 'Mostrando todo el historial' : `Viendo gastos de ${formatMonthLabel(selectedMonth)}`}
+            </span>
+            <span>•</span>
+            <Link href={selectedMonth !== ALL_MONTHS ? `/receipts?month=${selectedMonth}` : '/receipts'} className="text-blue-600 hover:underline font-medium">
+              Ver detalle en Mis Boletas ({currentMonthReceipts.length})
             </Link>
           </div>
         </div>

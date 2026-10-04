@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { currentMonthKey, defaultDateForMonth } from '@/lib/month-utils';
 import { useRouter } from 'next/navigation';
 import { AppLayout } from '@/components/layout/app-layout';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
@@ -109,6 +110,13 @@ export default function NewReceiptPage() {
   );
   const [organization, setOrganization] = useState<string>(activeOrg?.name || 'Mi Empresa Principal');
   const [notes, setNotes] = useState<string>('');
+  const [periodMonth, setPeriodMonth] = useState<string>(currentMonthKey());
+
+  // Si se llegó desde el listado con un mes seleccionado (?month=YYYY-MM), usarlo
+  useEffect(() => {
+    const m = new URLSearchParams(window.location.search).get('month');
+    if (m && /^\d{4}-(0[1-9]|1[0-2])$/.test(m)) setPeriodMonth(m);
+  }, []);
 
   const [activeFilter, setActiveFilter] = useState<ScannerFilterMode>('magic_bw');
   const originalFileRef = useRef<File | null>(null);
@@ -227,7 +235,7 @@ export default function NewReceiptPage() {
         merchant_address: docHeader.merchant_address,
         receipt_number: docHeader.receipt_number,
         document_type: docHeader.document_type || 'boleta',
-        document_date: docHeader.date || new Date().toISOString().split('T')[0],
+        document_date: docHeader.date || defaultDateForMonth(periodMonth),
         document_time: docHeader.time || '12:00',
         currency: 'CLP',
         subtotal: docHeader.subtotal || docHeader.total,
@@ -495,6 +503,21 @@ export default function NewReceiptPage() {
                   onChange={(e) => setOrganization(e.target.value)}
                   placeholder="Ej: Mi Empresa SpA"
                 />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="period-month" className="text-xs font-semibold">
+                  Mes del gasto
+                </Label>
+                <Input
+                  id="period-month"
+                  type="month"
+                  value={periodMonth}
+                  onChange={(e) => e.target.value && setPeriodMonth(e.target.value)}
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Se usa si la boleta no trae fecha legible. Si la IA detecta la fecha, esa prevalece.
+                </p>
               </div>
 
               <div className="space-y-2">

@@ -9,6 +9,7 @@ import { useReceipts } from '@/lib/store/receipts-context';
 import { useAuth } from '@/lib/store/auth-context';
 import { formatCLP, formatDateCL } from '@/lib/utils';
 import { exportLibroComprasExcel, exportLibroComprasCSV, getSIIDocumentCode } from '@/lib/export-utils';
+import { monthKeyOf } from '@/lib/month-utils';
 import {
   BookOpen,
   FileSpreadsheet,
@@ -26,8 +27,8 @@ export default function LibroComprasPage() {
   const { receipts } = useReceipts();
   const { activeOrg, activeOrgId, organizations } = useAuth();
 
-  const [selectedMonth, setSelectedMonth] = useState<number>(9);
-  const [selectedYear, setSelectedYear] = useState<number>(2026);
+  const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1);
+  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [docTypeFilter, setDocTypeFilter] = useState<string>('all');
 
   const monthNames = [
@@ -35,10 +36,16 @@ export default function LibroComprasPage() {
     'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
   ];
 
-  // Filtrar boletas y facturas
+  const targetPeriodKey = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`;
+
+  // Filtrar boletas y facturas por período tributario y filtros
   const libroReceipts = useMemo(() => {
     return receipts.filter((r) => {
       if (r.status === 'rejected') return false;
+      if (r.document_date) {
+        const k = monthKeyOf(r.document_date);
+        if (k && k !== targetPeriodKey) return false;
+      }
       if (activeOrgId !== 'all') {
         if (activeOrgId === 'org-personal') {
           if (r.expense_type !== 'personal' && r.organization_id !== 'org-personal') return false;
@@ -49,7 +56,7 @@ export default function LibroComprasPage() {
       if (docTypeFilter !== 'all' && r.document_type !== docTypeFilter) return false;
       return true;
     });
-  }, [receipts, activeOrgId, docTypeFilter]);
+  }, [receipts, activeOrgId, docTypeFilter, targetPeriodKey]);
 
   // Cálculos Tributarios para Formulario F29
   const totalDocumentos = libroReceipts.length;
