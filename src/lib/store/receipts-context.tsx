@@ -210,23 +210,56 @@ export function ReceiptsProvider({ children }: { children: React.ReactNode }) {
         setReceivables([]);
       }
 
-      // Sincronizar en tiempo real desde Supabase si está configurado
-      dbFetchDocuments().then((supabaseDocs) => {
-        if (supabaseDocs && supabaseDocs.length > 0) {
-          setReceipts(supabaseDocs);
-        }
-      });
+      // Sincronizar con Supabase (fuente de verdad cuando hay sesión real).
+      // La primera vez en cada dispositivo, sube lo que solo existe localmente;
+      // después, el estado es exactamente lo que hay en la base de datos.
+      const SYNC_FLAG = 'subeboletas_cloud_synced_v1';
+      const alreadySynced = localStorage.getItem(SYNC_FLAG) === '1';
 
-      dbFetchDebts().then((supabaseDebts) => {
-        if (supabaseDebts && supabaseDebts.length > 0) {
-          setDebts(supabaseDebts);
+      const syncCollection = async <T extends { id: string }>(
+        fetchRemote: () => Promise<T[] | null>,
+        insertRemote: (item: T) => Promise<boolean>,
+        localItems: T[],
+        apply: (items: T[]) => void
+      ): Promise<boolean> => {
+        const remote = await fetchRemote();
+        if (remote === null) return false; // sin sesión o error: se mantiene lo local
+        if (alreadySynced) {
+          apply(remote);
+          return true;
         }
-      });
+        const remoteIds = new Set(remote.map((r) => r.id));
+        const localOnly = localItems.filter((l) => !remoteIds.has(l.id));
+        const results = await Promise.all(localOnly.map((l) => insertRemote(l)));
+        const uploaded = localOnly.filter((_, i) => results[i]);
+        apply([...remote, ...uploaded]);
+        return results.every(Boolean);
+      };
 
-      dbFetchReceivables().then((supabaseRecs) => {
-        if (supabaseRecs && supabaseRecs.length > 0) {
-          setReceivables(supabaseRecs);
-        }
+      const localRecs: ExpenseDocument[] = savedRecs ? JSON.parse(savedRecs) : [];
+      const localDebts: AccountPayable[] = savedDebts ? JSON.parse(savedDebts) : [];
+      const localRecv: AccountReceivable[] = savedReceivables ? JSON.parse(savedReceivables) : [];
+
+      Promise.all([
+        syncCollection(dbFetchDocuments, dbInsertDocument, localRecs, setReceipts),
+        syncCollection(
+          dbFetchDebts,
+          dbInsertDebt,
+          localDebts,
+          (items) =>
+            setDebts(items.map((d) => ({ ...d, status: computeDebtStatus(d.due_date, !!d.paid_at) })))
+        ),
+        syncCollection(
+          dbFetchReceivables,
+          dbInsertReceivable,
+          localRecv,
+          (items) =>
+            setReceivables(
+              items.map((r) => ({ ...r, status: computeReceivableStatus(r.due_date, !!r.collected_at) }))
+            )
+        ),
+      ]).then((oks) => {
+        if (oks.every(Boolean)) localStorage.setItem(SYNC_FLAG, '1');
       });
     } catch (e) {
       console.warn('Error cargando datos de LocalStorage:', e);

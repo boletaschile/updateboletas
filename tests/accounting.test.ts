@@ -73,6 +73,9 @@ describe('Utilidades Contables y Formato Chileno', () => {
         card_last_four: '1234',
         authorization_code: '581902',
         confidence: 0.95,
+        purchase_summary: 'Compra de resma de papel',
+        category: 'Insumos de oficina',
+        detected_items_reference: ['RESMA PAPEL CARTA'],
       },
       items: [
         {
