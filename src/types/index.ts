@@ -224,6 +224,9 @@ export interface AccountReceivable {
   collected_amount?: number | null;
   payment_method?: string | null;
   notes?: string | null;
+  file_name?: string | null;
+  file_url?: string | null;
+  file_size?: number | null;
   created_at: string;
   updated_at: string;
 }

@@ -1,4 +1,4 @@
-﻿import { getSupabaseBrowserClient, isSupabaseConfigured } from './client';
+import { getSupabaseBrowserClient, isSupabaseConfigured } from './client';
 import {
   ExpenseDocument,
   ExpenseItem,
@@ -315,9 +315,17 @@ export async function dbInsertReceivable(rec: AccountReceivable): Promise<boolea
     const supabase = getSupabaseBrowserClient();
     const cleanId = ensureUUID(rec.id);
 
-    const { error } = await supabase.from('accounts_receivable').insert([
-      { ...toDbRow(rec, userId), id: cleanId },
-    ]);
+    const payload: Record<string, any> = { ...toDbRow(rec, userId), id: cleanId };
+
+    let { error } = await supabase.from('accounts_receivable').insert([payload]);
+
+    if (error && (error.message.includes('file_') || error.message.includes('column'))) {
+      delete payload.file_name;
+      delete payload.file_url;
+      delete payload.file_size;
+      const retry = await supabase.from('accounts_receivable').insert([payload]);
+      error = retry.error;
+    }
 
     if (error) {
       console.warn('Error inserting accounts_receivable:', error.message, error.details || '');
@@ -335,10 +343,23 @@ export async function dbUpdateReceivable(id: string, updates: Partial<AccountRec
   try {
     if (!(await getAuthUserId())) return false;
     const supabase = getSupabaseBrowserClient();
-    const { error } = await supabase
+    const updatePayload: Record<string, any> = toDbUpdate(updates);
+
+    let { error } = await supabase
       .from('accounts_receivable')
-      .update(toDbUpdate(updates))
+      .update(updatePayload)
       .eq('id', id);
+
+    if (error && (error.message.includes('file_') || error.message.includes('column'))) {
+      delete updatePayload.file_name;
+      delete updatePayload.file_url;
+      delete updatePayload.file_size;
+      const retry = await supabase
+        .from('accounts_receivable')
+        .update(updatePayload)
+        .eq('id', id);
+      error = retry.error;
+    }
 
     if (error) {
       console.warn('Error updating accounts_receivable:', error.message);

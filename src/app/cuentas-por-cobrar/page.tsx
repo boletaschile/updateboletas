@@ -31,6 +31,8 @@ import {
   Receipt,
   FileText,
   HelpCircle,
+  UploadCloud,
+  Paperclip,
 } from 'lucide-react';
 
 export default function CuentasPorCobrarPage() {
@@ -44,6 +46,8 @@ export default function CuentasPorCobrarPage() {
   const { activeOrg, activeOrgId } = useAuth();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const fileInputRef = React.useRef<HTMLInputElement | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterDocType, setFilterDocType] = useState<string>('all');
   const [filterScope, setFilterScope] = useState<string>('all');
@@ -214,6 +218,19 @@ export default function CuentasPorCobrarPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,image/*,.png,.jpg,.jpeg"
+              className="hidden"
+              onChange={(e) => {
+                if (e.target.files && e.target.files[0]) {
+                  setUploadFile(e.target.files[0]);
+                  setIsModalOpen(true);
+                  e.target.value = '';
+                }
+              }}
+            />
             <Button
               variant="outline"
               size="sm"
@@ -224,11 +241,65 @@ export default function CuentasPorCobrarPage() {
               Exportar Excel
             </Button>
             <Button
-              onClick={() => setIsModalOpen(true)}
-              className="bg-emerald-600 hover:bg-emerald-500 text-white font-medium shadow-lg shadow-emerald-900/30"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setUploadFile(null);
+                setIsModalOpen(true);
+              }}
+              className="border-slate-700 bg-slate-800/80 hover:bg-slate-700 text-slate-200"
             >
-              <PlusCircle className="w-4 h-4 mr-1.5" />
-              Nuevo Trabajo / Cobro
+              <PlusCircle className="w-4 h-4 mr-1.5 text-emerald-400" />
+              Ingreso Manual
+            </Button>
+            <Button
+              onClick={() => fileInputRef.current?.click()}
+              className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold shadow-lg shadow-emerald-900/30 flex items-center gap-1.5"
+            >
+              <UploadCloud className="w-4 h-4" />
+              Subir Cotización / Factura (PDF)
+            </Button>
+          </div>
+        </div>
+
+        {/* Banner de Subida Rápida de Cotizaciones y Facturas */}
+        <div
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => {
+            e.preventDefault();
+            if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+              setUploadFile(e.dataTransfer.files[0]);
+              setIsModalOpen(true);
+            }
+          }}
+          className="bg-gradient-to-r from-emerald-950/40 via-slate-850 to-slate-900 border border-emerald-500/30 rounded-xl p-4 flex flex-col md:flex-row items-center justify-between gap-4 shadow-sm"
+        >
+          <div className="flex items-center gap-3.5">
+            <div className="p-3 bg-emerald-500/15 border border-emerald-500/30 rounded-xl text-emerald-400 shrink-0">
+              <UploadCloud className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-semibold text-white">
+                  ¿Tienes una Cotización aprobada o Factura por cobrar?
+                </h3>
+                <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-400 border-emerald-500/30">
+                  PDF o Foto
+                </Badge>
+              </div>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Sube el PDF de la cotización o factura para respaldar el cobro, autocompletar montos con IA y programar alertas antes del vencimiento.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 w-full md:w-auto shrink-0">
+            <Button
+              onClick={() => fileInputRef.current?.click()}
+              className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold w-full md:w-auto shadow-md"
+            >
+              <UploadCloud className="w-4 h-4 mr-1.5" />
+              Subir Documento (PDF)
             </Button>
           </div>
         </div>
@@ -405,14 +476,28 @@ export default function CuentasPorCobrarPage() {
                             Comienza agregando un trabajo realizado o una factura pendiente de pago.
                           </p>
                         </div>
-                        <Button
-                          size="sm"
-                          onClick={() => setIsModalOpen(true)}
-                          className="bg-emerald-600 hover:bg-emerald-500 text-white mt-1"
-                        >
-                          <PlusCircle className="w-4 h-4 mr-1.5" />
-                          Registrar Primer Trabajo
-                        </Button>
+                        <div className="flex flex-wrap items-center justify-center gap-2 mt-1">
+                          <Button
+                            size="sm"
+                            onClick={() => fileInputRef.current?.click()}
+                            className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold"
+                          >
+                            <UploadCloud className="w-4 h-4 mr-1.5" />
+                            Subir Cotización / Factura (PDF)
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setUploadFile(null);
+                              setIsModalOpen(true);
+                            }}
+                            className="border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700"
+                          >
+                            <PlusCircle className="w-4 h-4 mr-1.5 text-emerald-400" />
+                            Ingreso Manual
+                          </Button>
+                        </div>
                       </div>
                     </td>
                   </tr>
@@ -451,12 +536,27 @@ export default function CuentasPorCobrarPage() {
                           )}
                         </td>
 
-                        {/* Tipo / Folio */}
+                        {/* Tipo / Folio / Archivo */}
                         <td className="py-3 px-3 whitespace-nowrap">
                           <div>{getDocTypeBadge(r.document_type)}</div>
                           {r.invoice_number && (
                             <div className="text-[11px] text-slate-400 font-mono mt-1">
                               Folio: {r.invoice_number}
+                            </div>
+                          )}
+                          {r.file_name && (
+                            <div className="mt-1">
+                              <a
+                                href={r.file_url || '#'}
+                                download={r.file_name}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-400 hover:text-emerald-300 hover:underline max-w-[130px] truncate"
+                                title={`Descargar ${r.file_name}`}
+                              >
+                                <Paperclip className="w-3 h-3 text-emerald-400 shrink-0" />
+                                <span className="truncate">{r.file_name}</span>
+                              </a>
                             </div>
                           )}
                         </td>
@@ -590,7 +690,14 @@ export default function CuentasPorCobrarPage() {
         </div>
 
         {/* Modal de Registro */}
-        <NewReceivableModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+        <NewReceivableModal
+          isOpen={isModalOpen}
+          onClose={() => {
+            setIsModalOpen(false);
+            setUploadFile(null);
+          }}
+          initialFile={uploadFile}
+        />
       </div>
     </AppLayout>
   );

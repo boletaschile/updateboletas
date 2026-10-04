@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -17,7 +17,6 @@ import { useReceipts } from '@/lib/store/receipts-context';
 import { validateRUT, formatRUT, formatCLP } from '@/lib/utils';
 import { ReceivableDocumentType } from '@/types';
 import {
-  FileSpreadsheet,
   AlertTriangle,
   Building2,
   User,
@@ -27,16 +26,33 @@ import {
   CheckCircle2,
   Clock,
   Sparkles,
+  UploadCloud,
+  FileText,
+  X,
+  Loader2,
+  Paperclip,
 } from 'lucide-react';
 
 interface NewReceivableModalProps {
   isOpen: boolean;
   onClose: () => void;
+  initialFile?: File | null;
 }
 
-export function NewReceivableModal({ isOpen, onClose }: NewReceivableModalProps) {
+export function NewReceivableModal({ isOpen, onClose, initialFile }: NewReceivableModalProps) {
   const { addReceivable } = useReceipts();
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  // File state
+  const [file, setFile] = useState<File | null>(null);
+  const [fileName, setFileName] = useState<string>('');
+  const [fileUrl, setFileUrl] = useState<string>('');
+  const [fileSize, setFileSize] = useState<number>(0);
+  const [isDragging, setIsDragging] = useState<boolean>(false);
+  const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
+  const [aiMessage, setAiMessage] = useState<string | null>(null);
+
+  // Form inputs
   const [clientName, setClientName] = useState('');
   const [clientRut, setClientRut] = useState('');
   const [clientContact, setClientContact] = useState('');
@@ -109,6 +125,128 @@ export function NewReceivableModal({ isOpen, onClose }: NewReceivableModalProps)
     setDueDate(base.toISOString().split('T')[0]);
   };
 
+  // Procesamiento y extracción inteligente del archivo subido
+  const handleFileSelect = async (selectedFile: File) => {
+    setFile(selectedFile);
+    setFileName(selectedFile.name);
+    setFileSize(selectedFile.size);
+    setAiMessage(null);
+
+    // Guardar preview URL o data URL para descargar / ver
+    if (selectedFile.size < 1_500_000) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setFileUrl(e.target?.result as string);
+      };
+      reader.readAsDataURL(selectedFile);
+    } else {
+      setFileUrl(URL.createObjectURL(selectedFile));
+    }
+
+    // Heurística rápida sobre el nombre de archivo
+    const nameLower = selectedFile.name.toLowerCase();
+    let detectedDocType: ReceivableDocumentType = documentType;
+
+    if (nameLower.includes('cotiz') || nameLower.includes('presupuesto') || nameLower.includes('wu-') || nameLower.includes('propuesta')) {
+      detectedDocType = 'cotizacion_aprobada';
+      setDocumentType('cotizacion_aprobada');
+    } else if (nameLower.includes('fact') || nameLower.includes('fac-') || nameLower.includes('f-')) {
+      detectedDocType = 'factura_afecta';
+      setDocumentType('factura_afecta');
+    } else if (nameLower.includes('honorario') || nameLower.includes('bhe')) {
+      detectedDocType = 'boleta_honorarios';
+      setDocumentType('boleta_honorarios');
+    } else if (nameLower.includes('orden') || nameLower.includes('oc-')) {
+      detectedDocType = 'orden_compra';
+      setDocumentType('orden_compra');
+    }
+
+    // Extraer posible folio del nombre de archivo (ej: WU-2026-5747, 363, COT-5747)
+    const folioMatch = selectedFile.name.match(/(?:[a-zA-Z]{1,4}[-_])?\d{2,8}(?:[-_]\d{1,6})?/i);
+    if (folioMatch && (!invoiceNumber || invoiceNumber === '')) {
+      setInvoiceNumber(folioMatch[0]);
+    }
+
+    // Análisis OCR / IA
+    setIsAnalyzing(true);
+    setAiMessage('Leyendo datos de la cotización/factura con IA...');
+
+    try {
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+      formData.append('expense_type', incomeType);
+
+      const res = await fetch('/api/receipts/process', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.data) {
+          const doc = json.data.document || {};
+
+          if (doc.merchant_name && (!clientName || clientName === '')) {
+            setClientName(doc.merchant_name);
+          }
+          if (doc.merchant_rut && (!clientRut || clientRut === '')) {
+            setClientRut(formatRUT(doc.merchant_rut));
+          }
+          if (doc.receipt_number && (!invoiceNumber || invoiceNumber === '')) {
+            setInvoiceNumber(doc.receipt_number);
+          }
+          if (doc.document_date) {
+            setIssueDate(doc.document_date);
+            const d = new Date(doc.document_date + 'T00:00:00');
+            d.setDate(d.getDate() + 30);
+            setDueDate(d.toISOString().split('T')[0]);
+          }
+          if (doc.total_amount && doc.total_amount > 0) {
+            const tot = Math.round(doc.total_amount);
+            setTotalAmount(tot);
+            if (detectedDocType === 'factura_afecta' || detectedDocType === 'cotizacion_aprobada') {
+              const net = Math.round(tot / 1.19);
+              setNetAmount(net);
+              setTaxAmount(tot - net);
+            } else {
+              setNetAmount(tot);
+              setTaxAmount(0);
+            }
+          }
+          if (doc.purchase_summary && (!serviceDescription || serviceDescription === '')) {
+            setServiceDescription(doc.purchase_summary);
+          }
+
+          setAiMessage('✨ ¡Datos extraídos automáticamente del documento! Puedes ajustarlos antes de guardar.');
+        } else {
+          setAiMessage('Documento adjunto correctamente.');
+        }
+      } else {
+        setAiMessage('Documento adjunto correctamente. Completa los detalles del cobro.');
+      }
+    } catch {
+      setAiMessage('Documento adjunto correctamente. Completa los detalles del cobro.');
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  const handleRemoveFile = () => {
+    setFile(null);
+    setFileName('');
+    setFileUrl('');
+    setFileSize(0);
+    setAiMessage(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  // Cargar archivo inicial si se pasó por props
+  useEffect(() => {
+    if (initialFile && isOpen) {
+      handleFileSelect(initialFile);
+    }
+  }, [initialFile, isOpen]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!clientName.trim() || !serviceDescription.trim() || !dueDate || totalAmount <= 0) return;
@@ -129,6 +267,9 @@ export function NewReceivableModal({ isOpen, onClose }: NewReceivableModalProps)
       reminder_days_before: reminderDays,
       income_type: incomeType,
       notes: notes.trim() || null,
+      file_name: fileName || null,
+      file_url: fileUrl || null,
+      file_size: fileSize || null,
     });
 
     handleClose();
@@ -145,6 +286,7 @@ export function NewReceivableModal({ isOpen, onClose }: NewReceivableModalProps)
     setTaxAmount(95000);
     setTotalAmount(595000);
     setNotes('');
+    handleRemoveFile();
     onClose();
   };
 
@@ -158,16 +300,121 @@ export function NewReceivableModal({ isOpen, onClose }: NewReceivableModalProps)
             </div>
             <div>
               <DialogTitle className="text-xl font-bold text-white">
-                Nuevo Trabajo / Cuenta por Cobrar
+                Subir Cotización / Factura por Cobrar
               </DialogTitle>
               <DialogDescription className="text-slate-400 text-xs">
-                Registra servicios entregados, facturas emitidas y cotizaciones por cobrar.
+                Sube el PDF de la cotización aprobada o factura de venta para respaldar el cobro y autocompletar datos con IA.
               </DialogDescription>
             </div>
           </div>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4 pt-2">
+        <form onSubmit={handleSubmit} className="space-y-4 pt-1">
+          {/* Zona de Subida de Documento (PDF o Imagen) */}
+          <div className="space-y-2">
+            <Label className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <Paperclip className="w-3.5 h-3.5 text-emerald-400" />
+                Documento de Respaldo (Cotización PDF / Factura)
+              </span>
+              <span className="text-[11px] text-slate-400 font-normal">Opcional pero recomendado</span>
+            </Label>
+
+            {!file ? (
+              <div
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setIsDragging(true);
+                }}
+                onDragLeave={() => setIsDragging(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setIsDragging(false);
+                  if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                    handleFileSelect(e.dataTransfer.files[0]);
+                  }
+                }}
+                onClick={() => fileInputRef.current?.click()}
+                className={`border-2 border-dashed rounded-xl p-4 text-center cursor-pointer transition-all ${
+                  isDragging
+                    ? 'border-emerald-400 bg-emerald-500/15'
+                    : 'border-slate-700 hover:border-emerald-500/70 bg-slate-800/40 hover:bg-slate-800/70'
+                }`}
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf,image/*,.png,.jpg,.jpeg"
+                  className="hidden"
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files[0]) {
+                      handleFileSelect(e.target.files[0]);
+                    }
+                  }}
+                />
+                <div className="flex flex-col items-center gap-2">
+                  <div className="p-2.5 rounded-full bg-emerald-500/15 text-emerald-400">
+                    <UploadCloud className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-white">
+                      Arrastra tu Cotización o Factura aquí
+                    </p>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      o haz clic para explorar tus archivos (PDF, JPG, PNG hasta 25MB)
+                    </p>
+                  </div>
+                  <span className="text-[11px] text-emerald-400 font-medium flex items-center gap-1 mt-0.5 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                    <Sparkles className="w-3 h-3" /> Autocompleta cliente, folio y montos con IA
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-emerald-950/20 border border-emerald-500/40 rounded-xl p-3 flex flex-col gap-2">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 overflow-hidden">
+                    <div className="p-2 rounded-lg bg-emerald-500/20 text-emerald-400 shrink-0">
+                      <FileText className="w-5 h-5" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-white truncate">{fileName}</p>
+                      <p className="text-[11px] text-slate-400">
+                        {(fileSize / 1024).toFixed(0)} KB · Documento cargado
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    {isAnalyzing ? (
+                      <span className="text-xs text-emerald-400 flex items-center gap-1">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" /> Extrayendo...
+                      </span>
+                    ) : (
+                      <Badge variant="outline" className="text-[11px] border-emerald-500/40 text-emerald-400 bg-emerald-500/10">
+                        <CheckCircle2 className="w-3 h-3 mr-1" /> Adjunto
+                      </Badge>
+                    )}
+                    <button
+                      type="button"
+                      onClick={handleRemoveFile}
+                      className="p-1 rounded text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition-colors"
+                      title="Quitar archivo"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+
+                {aiMessage && (
+                  <div className="text-xs text-emerald-300 bg-emerald-900/30 border border-emerald-500/30 rounded-lg px-2.5 py-1.5 flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    <span>{aiMessage}</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* Clasificación: Empresa vs Personal */}
           <div className="bg-slate-800/80 p-3 rounded-xl border border-slate-700 space-y-2">
             <Label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
@@ -264,14 +511,14 @@ export function NewReceivableModal({ isOpen, onClose }: NewReceivableModalProps)
           {/* Tipo de Documento y Folio */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-300">Tipo de Documento Tributario</Label>
+              <Label className="text-xs font-medium text-slate-300">Tipo de Documento</Label>
               <select
                 value={documentType}
                 onChange={(e) => handleDocumentTypeChange(e.target.value as ReceivableDocumentType)}
                 className="w-full bg-slate-800 border border-slate-700 rounded-md py-2 px-3 text-sm text-white focus:outline-none focus:border-emerald-500"
               >
-                <option value="factura_afecta">Factura Electrónica Afecta (19% IVA)</option>
                 <option value="cotizacion_aprobada">Cotización Aprobada por Cliente</option>
+                <option value="factura_afecta">Factura Electrónica Afecta (19% IVA)</option>
                 <option value="orden_compra">Orden de Compra (OC)</option>
                 <option value="factura_exenta">Factura Electrónica Exenta</option>
                 <option value="boleta_honorarios">Boleta de Honorarios (con Retención)</option>
@@ -282,7 +529,7 @@ export function NewReceivableModal({ isOpen, onClose }: NewReceivableModalProps)
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-slate-300">N° Folio / Factura / Cotización (Opcional)</Label>
               <Input
-                placeholder="Ej: F-363, COT-5747, OC-892"
+                placeholder="Ej: COT-5747, F-363, OC-892"
                 value={invoiceNumber}
                 onChange={(e) => setInvoiceNumber(e.target.value)}
                 className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500 focus:border-emerald-500"
@@ -344,7 +591,7 @@ export function NewReceivableModal({ isOpen, onClose }: NewReceivableModalProps)
           {/* Fechas de Emisión y Vencimiento */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-300">Fecha de Emisión / Trabajo</Label>
+              <Label className="text-xs font-medium text-slate-300">Fecha de Emisión / Cotización</Label>
               <Input
                 type="date"
                 value={issueDate}

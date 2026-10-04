@@ -19,5 +19,10 @@ BEGIN
     ALTER TABLE public.accounts_receivable DROP CONSTRAINT IF EXISTS accounts_receivable_document_type_check;
     ALTER TABLE public.accounts_receivable ADD CONSTRAINT accounts_receivable_document_type_check 
       CHECK (document_type IN ('factura_afecta', 'factura_exenta', 'boleta_honorarios', 'orden_compra', 'cotizacion_aprobada', 'sin_facturar'));
+    
+    ALTER TABLE public.accounts_receivable ADD COLUMN IF NOT EXISTS file_name TEXT;
+    ALTER TABLE public.accounts_receivable ADD COLUMN IF NOT EXISTS file_url TEXT;
+    ALTER TABLE public.accounts_receivable ADD COLUMN IF NOT EXISTS file_size INT;
   END IF;
 END $$;
+
