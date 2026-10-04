@@ -32,6 +32,7 @@ import {
   PlusCircle,
   Eye,
   Check,
+  Trash2,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -47,6 +48,7 @@ export default function ConciliacionBancariaPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
+  const [deletedTx, setDeletedTx] = useState<BankTransaction | null>(null);
 
   // Comprobantes filtrados según la organización / perfil activo
   const scopedReceipts = useMemo(() => {
@@ -194,6 +196,35 @@ export default function ConciliacionBancariaPage() {
     );
   };
 
+  // Eliminar movimiento bancario individual
+  const handleDeleteTransaction = (txId: string) => {
+    const tx = transactions.find((t) => t.id === txId);
+    if (tx) {
+      setDeletedTx(tx);
+      setTransactions((prev) => prev.filter((t) => t.id !== txId));
+      setUploadError(null);
+    }
+  };
+
+  // Deshacer la eliminación del último movimiento
+  const handleUndoDelete = () => {
+    if (deletedTx) {
+      setTransactions((prev) => [deletedTx, ...prev]);
+      setDeletedTx(null);
+    }
+  };
+
+  // Vaciar toda la cartola de movimientos
+  const handleClearAllTransactions = () => {
+    if (window.confirm('¿Deseas vaciar todos los movimientos bancarios de la cartola actual?')) {
+      setTransactions([]);
+      setHasReconciled(false);
+      setBankFile(null);
+      setUploadSuccess(null);
+      setDeletedTx(null);
+    }
+  };
+
   // Métricas de Conciliación basadas en orgTransactions
   const totalBankCharges = orgTransactions.reduce((acc, t) => acc + t.amount, 0);
   const matchedTransactions = orgTransactions.filter((t) => t.status === 'matched');
@@ -313,9 +344,41 @@ export default function ConciliacionBancariaPage() {
                 <RefreshCw className="h-3.5 w-3.5" />
                 <span>Usar Cartola Demo</span>
               </Button>
+              {transactions.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleClearAllTransactions}
+                  className="text-xs text-muted-foreground hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 gap-1.5"
+                  title="Eliminar todos los movimientos de la cartola"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  <span>Vaciar Cartola</span>
+                </Button>
+              )}
             </div>
           </div>
         </Card>
+
+        {/* Notificación de deshacer eliminación */}
+        {deletedTx && (
+          <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-xs text-amber-900 dark:text-amber-200 flex items-center justify-between gap-3 shadow-sm">
+            <div className="flex items-center gap-2 truncate">
+              <AlertCircle className="h-4 w-4 text-amber-600 flex-shrink-0" />
+              <span className="truncate">
+                Se eliminó el movimiento <strong>&quot;{deletedTx.description}&quot;</strong> ({formatCLP(deletedTx.amount)}).
+              </span>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleUndoDelete}
+              className="h-7 text-xs px-2.5 text-amber-900 dark:text-amber-200 border-amber-300 dark:border-amber-700 hover:bg-amber-100 dark:hover:bg-amber-900/50 flex-shrink-0"
+            >
+              Deshacer
+            </Button>
+          </div>
+        )}
 
         {/* Notificaciones de subida */}
         {uploadSuccess && (
@@ -595,6 +658,17 @@ export default function ConciliacionBancariaPage() {
                                 </Button>
                               </Link>
                             )}
+
+                            {/* Eliminar movimiento bancario individual */}
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleDeleteTransaction(tx.id)}
+                              className="h-7 w-7 p-0 text-muted-foreground hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors"
+                              title="Eliminar este movimiento bancario"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
                           </div>
                         </td>
                       </tr>
