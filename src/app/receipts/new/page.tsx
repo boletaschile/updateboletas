@@ -2,6 +2,7 @@
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { currentMonthKey, defaultDateForMonth } from '@/lib/month-utils';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AppLayout } from '@/components/layout/app-layout';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
@@ -28,6 +29,7 @@ import {
   Smartphone,
   Wand2,
   Palette,
+  FileSpreadsheet,
 } from 'lucide-react';
 import {
   processImageWithScannerFilter,
@@ -290,8 +292,8 @@ export default function NewReceiptPage() {
       description="Sube fotografías, capturas o PDFs de boletas para extracción automática con OCR e IA."
     >
       <div className="max-w-4xl mx-auto space-y-6">
-        {/* Acceso Rápido Móvil a Cámara */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {/* Accesos Rápidos: Cámara, Móvil y Planilla Excel */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <Button
             type="button"
             onClick={() => setIsCameraModalOpen(true)}
@@ -320,6 +322,22 @@ export default function NewReceiptPage() {
               <span className="text-[11px] text-muted-foreground font-normal">Disparador nativo móvil</span>
             </div>
           </Button>
+
+          <Link href="/receipts/import-excel" className="block">
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full h-14 border-emerald-300 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/30 hover:bg-emerald-100/60 text-foreground font-semibold text-sm rounded-xl flex items-center justify-center gap-3 active:scale-[0.98]"
+            >
+              <div className="h-9 w-9 rounded-full bg-emerald-100 dark:bg-emerald-900 text-emerald-600 flex items-center justify-center">
+                <FileSpreadsheet className="h-5 w-5" />
+              </div>
+              <div className="text-left">
+                <span className="block leading-none">Subir Planilla Excel</span>
+                <span className="text-[11px] text-emerald-700 dark:text-emerald-400 font-normal">Carga masiva .xlsx</span>
+              </div>
+            </Button>
+          </Link>
 
           {/* Input de cámara nativo con capture="environment" */}
           <input

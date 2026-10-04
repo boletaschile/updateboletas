@@ -27,6 +27,7 @@ import {
   Building2,
   User,
   Layers,
+  UploadCloud,
 } from 'lucide-react';
 
 import { useAuth } from '@/lib/store/auth-context';
@@ -247,7 +248,7 @@ export default function ReceiptsListPage() {
               </select>
             </div>
 
-            <div className="flex items-center gap-2 w-full md:w-auto justify-end">
+            <div className="flex items-center gap-2 w-full md:w-auto justify-end flex-wrap">
               <Button
                 variant="outline"
                 size="sm"
@@ -266,6 +267,16 @@ export default function ReceiptsListPage() {
                 <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" />
                 <span>Exportar Excel</span>
               </Button>
+              <Link href="/receipts/import-excel">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 text-xs border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950"
+                >
+                  <UploadCloud className="h-3.5 w-3.5 text-emerald-600" />
+                  <span>Importar Excel</span>
+                </Button>
+              </Link>
               <Link href={selectedMonth !== ALL_MONTHS ? `/receipts/new?month=${selectedMonth}` : '/receipts/new'}>
                 <Button size="sm" className="gap-1.5 text-xs">
                   <PlusCircle className="h-3.5 w-3.5" />
