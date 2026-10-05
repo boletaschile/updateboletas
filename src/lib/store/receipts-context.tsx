@@ -14,6 +14,7 @@ import {
 import { INITIAL_CATEGORIES } from './demo-data';
 import { useAuth } from './auth-context';
 import { calculateTotalsBreakdown } from '@/lib/utils';
+import { isSupabaseConfigured, getSupabaseBrowserClient } from '@/lib/supabase/client';
 import {
   ensureUUID,
   dbFetchDocuments,
@@ -214,8 +215,6 @@ export function ReceiptsProvider({ children }: { children: React.ReactNode }) {
       }
 
       // Sincronizar con Supabase (fuente de verdad cuando hay sesión real).
-      // La primera vez en cada dispositivo, sube lo que solo existe localmente;
-      // después, el estado es exactamente lo que hay en la base de datos.
       const alreadySynced = localStorage.getItem(SYNC_FLAG) === '1';
 
       const syncCollection = async <T extends { id: string }>(
@@ -225,16 +224,14 @@ export function ReceiptsProvider({ children }: { children: React.ReactNode }) {
         apply: (items: T[]) => void
       ): Promise<boolean> => {
         const remote = await fetchRemote();
-        if (remote === null) return false; // sin sesión o error: se mantiene lo local
-        if (alreadySynced) {
+        if (remote === null) return false;
+        if (alreadySynced || localItems.length === 0) {
           apply(remote);
           return true;
         }
         const remoteIds = new Set(remote.map((r) => r.id));
         const localOnly = localItems.filter((l) => !remoteIds.has(l.id));
         const results = await Promise.all(localOnly.map((l) => insertRemote(l)));
-        // Nunca descartar datos locales: si una subida falla, el item se conserva
-        // en este dispositivo y se reintenta en la próxima carga.
         apply([...remote, ...localOnly]);
         return results.every(Boolean);
       };
@@ -269,6 +266,61 @@ export function ReceiptsProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoaded(true);
     }
+  }, []);
+
+  // Función para re-sincronizar directamente con Supabase ante cualquier login o cambio de sesión
+  const syncWithCloud = async () => {
+    try {
+      const [remoteRecs, remoteDebts, remoteRecv] = await Promise.all([
+        dbFetchDocuments(),
+        dbFetchDebts(),
+        dbFetchReceivables(),
+      ]);
+
+      if (remoteRecs !== null) {
+        setReceipts(remoteRecs);
+        localStorage.setItem(STORAGE_KEY_RECEIPTS, JSON.stringify(remoteRecs));
+      }
+      if (remoteDebts !== null) {
+        const mappedDebts = remoteDebts.map((d) => ({
+          ...d,
+          status: computeDebtStatus(d.due_date, !!d.paid_at),
+        }));
+        setDebts(mappedDebts);
+        localStorage.setItem(STORAGE_KEY_DEBTS, JSON.stringify(mappedDebts));
+      }
+      if (remoteRecv !== null) {
+        const mappedRecs = remoteRecv.map((r) => ({
+          ...r,
+          status: computeReceivableStatus(r.due_date, !!r.collected_at),
+        }));
+        setReceivables(mappedRecs);
+        localStorage.setItem(STORAGE_KEY_RECEIVABLES, JSON.stringify(mappedRecs));
+      }
+    } catch (e) {
+      console.warn('Error en syncWithCloud:', e);
+    }
+  };
+
+  // Sincronizar automáticamente cuando el usuario inicia sesión o cambia
+  useEffect(() => {
+    if (user?.id) {
+      syncWithCloud();
+    }
+  }, [user?.id]);
+
+  // Escuchar cambios de sesión de Supabase Auth (ej. tras login en cualquier dominio)
+  useEffect(() => {
+    if (!isSupabaseConfigured()) return;
+    const supabase = getSupabaseBrowserClient();
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session?.user) {
+        syncWithCloud();
+      }
+    });
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   // Guardar en LocalStorage ante cambios

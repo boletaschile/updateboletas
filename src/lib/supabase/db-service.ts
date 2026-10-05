@@ -34,8 +34,10 @@ export async function getAuthUserId(): Promise<string | null> {
   if (!isSupabaseConfigured()) return null;
   try {
     const supabase = getSupabaseBrowserClient();
-    const { data } = await supabase.auth.getSession();
-    return data.session?.user?.id ?? null;
+    const { data: sessionData } = await supabase.auth.getSession();
+    if (sessionData?.session?.user?.id) return sessionData.session.user.id;
+    const { data: userData } = await supabase.auth.getUser();
+    return userData?.user?.id ?? null;
   } catch {
     return null;
   }

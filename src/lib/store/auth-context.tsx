@@ -206,37 +206,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (isSupabaseConfigured()) {
       try {
-        const supabase = getSupabaseBrowserClient();
-        const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-          email: cleanEmail,
-          password: password || 'BoletasChile2026!',
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: cleanEmail, password }),
         });
+        const resData = await res.json();
 
-        if (authData?.user) {
-          userId = authData.user.id;
+        if (res.ok && resData.session) {
+          const supabase = getSupabaseBrowserClient();
+          await supabase.auth.setSession(resData.session);
+          if (resData.user?.id) userId = resData.user.id;
           if (
-            authData.user.user_metadata?.organizations &&
-            Array.isArray(authData.user.user_metadata.organizations) &&
-            authData.user.user_metadata.organizations.length > 0
+            resData.user?.user_metadata?.organizations &&
+            Array.isArray(resData.user.user_metadata.organizations) &&
+            resData.user.user_metadata.organizations.length > 0
           ) {
-            remoteOrgs = authData.user.user_metadata.organizations;
+            remoteOrgs = resData.user.user_metadata.organizations;
           }
-        } else if (
-          authError &&
-          (authError.message.toLowerCase().includes('invalid') ||
-            authError.message.toLowerCase().includes('credentials') ||
-            authError.message.toLowerCase().includes('not found'))
-        ) {
-          // Si no existe, registrar automáticamente en Supabase Auth
-          const { data: signUpData } = await supabase.auth.signUp({
+        } else {
+          // Respaldo directo en cliente si el endpoint falla
+          const supabase = getSupabaseBrowserClient();
+          const { data: authData } = await supabase.auth.signInWithPassword({
             email: cleanEmail,
             password: password || 'BoletasChile2026!',
-            options: {
-              data: { full_name: fullName },
-            },
           });
-          if (signUpData?.user) {
-            userId = signUpData.user.id;
+          if (authData?.user) {
+            userId = authData.user.id;
+            if (authData.user.user_metadata?.organizations) {
+              remoteOrgs = authData.user.user_metadata.organizations;
+            }
           }
         }
       } catch (err) {
