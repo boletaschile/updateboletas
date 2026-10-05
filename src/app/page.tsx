@@ -535,22 +535,22 @@ export default function DashboardPage() {
                   <span>Subir Facturas Compra (RCV)</span>
                 </Button>
               </Link>
-              <Link href="/cuentas-por-cobrar">
+              <Link href="/libro-ventas">
                 <Button
                   variant="outline"
-                  className="border-blue-400/30 bg-blue-950/40 text-blue-100 hover:bg-blue-900/60 gap-1.5 font-medium text-xs"
+                  className="border-emerald-400/30 bg-emerald-950/40 text-emerald-100 hover:bg-emerald-900/60 gap-1.5 font-medium text-xs"
                 >
-                  <Briefcase className="h-4 w-4 text-emerald-400" />
-                  <span>Cuentas por Cobrar</span>
+                  <TrendingUp className="h-4 w-4 text-emerald-300" />
+                  <span>Libro de Ventas</span>
                 </Button>
               </Link>
-              <Link href="/cuentas-por-pagar">
+              <Link href="/libro-compras">
                 <Button
                   variant="outline"
                   className="border-blue-400/30 bg-blue-950/40 text-blue-100 hover:bg-blue-900/60 gap-1.5 font-medium text-xs"
                 >
-                  <Landmark className="h-4 w-4 text-amber-400" />
-                  <span>Cuentas por Pagar</span>
+                  <BookOpen className="h-4 w-4 text-blue-300" />
+                  <span>Libro de Compras</span>
                 </Button>
               </Link>
               <Button

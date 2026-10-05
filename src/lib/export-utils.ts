@@ -463,3 +463,162 @@ export function exportExpensesToCSV(receipts: ExpenseDocument[]) {
   link.click();
   document.body.removeChild(link);
 }
+
+/**
+ * Retorna el código de documento de ventas según el SII de Chile
+ */
+export function getSIISalesDocumentCode(docType: string): string {
+  switch (docType) {
+    case 'factura_afecta':
+      return '33'; // Factura Electrónica
+    case 'factura_exenta':
+      return '34'; // Factura No Afecta o Exenta Electrónica
+    case 'boleta_honorarios':
+      return '39'; // Boleta Electrónica
+    case 'cotizacion_aprobada':
+      return 'COT';
+    case 'orden_compra':
+      return 'OC';
+    default:
+      return '33';
+  }
+}
+
+/**
+ * Exporta el Libro de Ventas oficial (RCV SII) a Excel
+ */
+export function exportLibroVentasExcel(
+  receivables: AccountReceivable[],
+  company?: Organization | null,
+  periodMonth: number = new Date().getMonth() + 1,
+  periodYear: number = new Date().getFullYear()
+) {
+  const monthNames = [
+    'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+  ];
+  const periodText = `${monthNames[periodMonth - 1]} ${periodYear}`;
+
+  let totalNeto = 0;
+  let totalIva = 0;
+  let totalExento = 0;
+  let totalGeneral = 0;
+  let totalCobrado = 0;
+
+  const rows = receivables.map((r, index) => {
+    const docCode = getSIISalesDocumentCode(r.document_type);
+    const docName =
+      docCode === '33'
+        ? 'Factura Electrónica (33)'
+        : docCode === '34'
+        ? 'Factura Exenta (34)'
+        : docCode === '39'
+        ? 'Boleta Electrónica (39)'
+        : 'Documento Tributario';
+
+    const netoAmount = r.net_amount || 0;
+    const ivaAmount = r.tax_amount || 0;
+    const exentoAmount = r.document_type === 'factura_exenta' ? r.total_amount : 0;
+    const isCollected = r.status === 'collected';
+    const collectedAmount = isCollected ? (r.collected_amount || r.total_amount) : (r.collected_amount || 0);
+
+    totalNeto += netoAmount;
+    totalIva += ivaAmount;
+    totalExento += exentoAmount;
+    totalGeneral += r.total_amount;
+    totalCobrado += collectedAmount;
+
+    return {
+      'N°': index + 1,
+      'Cód. SII': docCode,
+      'Tipo Documento': docName,
+      'Folio / N°': r.invoice_number || 'S/N',
+      'Fecha Emisión': formatDateCL(r.issue_date),
+      'RUT Cliente / Receptor': r.client_rut || '',
+      'Razón Social Cliente': r.client_name,
+      'Monto Exento (CLP)': exentoAmount,
+      'Monto Neto (CLP)': netoAmount,
+      'IVA Débito Fiscal (19%)': ivaAmount,
+      'Monto Total Facturado (CLP)': r.total_amount,
+      'Estado Cobro': isCollected ? 'COBRADA' : r.status === 'overdue' ? 'VENCIDA (MORA)' : 'PENDIENTE',
+      'Monto Cobrado (CLP)': collectedAmount,
+      'Fecha Cobro': r.collected_at ? formatDateCL(r.collected_at) : '-',
+      'Medio de Pago': r.payment_method || '-',
+    };
+  });
+
+  const ws = XLSX.utils.json_to_sheet(rows);
+
+  const summaryData = [
+    { 'Concepto Tributario F29': 'Empresa / Razón Social', 'Valor': company?.legal_name || company?.name || 'Mi Empresa' },
+    { 'Concepto Tributario F29': 'RUT Emisor', 'Valor': company?.rut || '76.371.864-6' },
+    { 'Concepto Tributario F29': 'Período Tributario', 'Valor': periodText },
+    { 'Concepto Tributario F29': 'Cantidad de Documentos Emitidos', 'Valor': receivables.length },
+    { 'Concepto Tributario F29': 'Base Imponible Total (Ventas Netas)', 'Valor': totalNeto },
+    { 'Concepto Tributario F29': 'Total Débito Fiscal IVA (Línea F29 - Débito)', 'Valor': totalIva },
+    { 'Concepto Tributario F29': 'Total Facturado Bruto', 'Valor': totalGeneral },
+    { 'Concepto Tributario F29': 'Total Cobrado y Percibido', 'Valor': totalCobrado },
+    { 'Concepto Tributario F29': 'Saldo Pendiente por Cobrar', 'Valor': totalGeneral - totalCobrado },
+  ];
+  const wsSummary = XLSX.utils.json_to_sheet(summaryData);
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Libro de Ventas');
+  XLSX.utils.book_append_sheet(wb, wsSummary, 'Resumen F29 Ventas');
+
+  const fileName = `Libro_de_Ventas_${company?.name?.replace(/\s+/g, '_') || 'Empresa'}_${periodYear}_${String(periodMonth).padStart(2, '0')}.xlsx`;
+  XLSX.writeFile(wb, fileName);
+}
+
+/**
+ * Exporta el Libro de Ventas en formato CSV oficial compatible con el RCV del SII
+ */
+export function exportLibroVentasCSV(
+  receivables: AccountReceivable[],
+  company?: Organization | null,
+  periodMonth: number = new Date().getMonth() + 1,
+  periodYear: number = new Date().getFullYear()
+) {
+  const headers = [
+    'NRO_OPERACION',
+    'TIPO_DOC_SII',
+    'FOLIO',
+    'FECHA_DOCTO',
+    'RUT_RECEPTOR',
+    'RAZON_SOCIAL_RECEPTOR',
+    'MONTO_EXENTO',
+    'MONTO_NETO',
+    'IVA_DEBITO',
+    'MONTO_TOTAL',
+    'ESTADO_COBRO',
+    'MONTO_COBRADO',
+  ];
+
+  const rows = receivables.map((r, idx) => [
+    idx + 1,
+    getSIISalesDocumentCode(r.document_type),
+    r.invoice_number || '',
+    r.issue_date || '',
+    r.client_rut || '',
+    `"${r.client_name.replace(/"/g, '""')}"`,
+    r.document_type === 'factura_exenta' ? r.total_amount : 0,
+    r.net_amount || 0,
+    r.tax_amount || 0,
+    r.total_amount || 0,
+    r.status === 'collected' ? 'COBRADA' : 'PENDIENTE',
+    r.status === 'collected' ? (r.collected_amount || r.total_amount) : (r.collected_amount || 0),
+  ]);
+
+  const csvContent = '\uFEFF' + [headers.join(';'), ...rows.map((row) => row.join(';'))].join('\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.setAttribute('href', url);
+  link.setAttribute(
+    'download',
+    `Libro_Ventas_RCV_${periodYear}_${String(periodMonth).padStart(2, '0')}.csv`
+  );
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}

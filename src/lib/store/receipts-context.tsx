@@ -68,6 +68,7 @@ const STORAGE_KEY_CATEGORIES = 'subeboletas_categories_v1';
 const STORAGE_KEY_BUDGETS = 'subeboletas_budgets_v1';
 const STORAGE_KEY_DEBTS = 'subeboletas_debts_v1';
 const STORAGE_KEY_RECEIVABLES = 'subeboletas_receivables_v1';
+export const STORAGE_KEY_BANK_TRANSACTIONS = 'subeboletas_bank_transactions_v1';
 const SYNC_FLAG = 'subeboletas_cloud_synced_v1';
 
 // Firmas de datos demo para filtrado y purga automática en clientes móviles/antiguos
@@ -700,6 +701,7 @@ export function ReceiptsProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem(STORAGE_KEY_RECEIVABLES, JSON.stringify([]));
     localStorage.setItem(STORAGE_KEY_BUDGETS, JSON.stringify([]));
     localStorage.setItem(STORAGE_KEY_CATEGORIES, JSON.stringify(INITIAL_CATEGORIES));
+    localStorage.setItem(STORAGE_KEY_BANK_TRANSACTIONS, JSON.stringify([]));
     localStorage.setItem(SYNC_FLAG, '1');
 
     const ok = await dbClearAllUserData();

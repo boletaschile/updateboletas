@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { useReceipts } from '@/lib/store/receipts-context';
+import { useReceipts, STORAGE_KEY_BANK_TRANSACTIONS } from '@/lib/store/receipts-context';
 import { useAuth } from '@/lib/store/auth-context';
 import { BankTransaction } from '@/types';
 import { DEMO_BANK_TRANSACTIONS } from '@/lib/bank/demo-bank-statement';
@@ -40,7 +40,7 @@ export default function ConciliacionBancariaPage() {
   const { receipts, addReceipt } = useReceipts();
   const { activeOrg, activeOrgId } = useAuth();
 
-  const [transactions, setTransactions] = useState<BankTransaction[]>(DEMO_BANK_TRANSACTIONS);
+  const [transactions, setTransactions] = useState<BankTransaction[]>([]);
   const [bankFile, setBankFile] = useState<File | null>(null);
   const [isReconciling, setIsReconciling] = useState(false);
   const [hasReconciled, setHasReconciled] = useState(false);
@@ -49,6 +49,36 @@ export default function ConciliacionBancariaPage() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
   const [deletedTx, setDeletedTx] = useState<BankTransaction | null>(null);
+
+  // Carga persistente de transacciones desde localStorage
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem(STORAGE_KEY_BANK_TRANSACTIONS);
+        if (stored !== null) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed)) {
+            setTransactions(parsed);
+          }
+        }
+      } catch (err) {
+        console.error('Error cargando transacciones bancarias:', err);
+      }
+    }
+  }, []);
+
+  // Helper que persiste en estado y localStorage inmediatamente
+  const saveTransactions = (
+    updater: BankTransaction[] | ((prev: BankTransaction[]) => BankTransaction[])
+  ) => {
+    setTransactions((prev) => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(STORAGE_KEY_BANK_TRANSACTIONS, JSON.stringify(next));
+      }
+      return next;
+    });
+  };
 
   // Comprobantes filtrados según la organización / perfil activo
   const scopedReceipts = useMemo(() => {
@@ -100,7 +130,7 @@ export default function ConciliacionBancariaPage() {
         : (isDemoSession ? DEMO_RECEIPTS : []);
 
       const reconciled = reconcileTransactions(transactions, receiptsToMatch);
-      setTransactions(reconciled);
+      saveTransactions(reconciled);
       setIsReconciling(false);
       setHasReconciled(true);
     }, 600);
@@ -108,7 +138,7 @@ export default function ConciliacionBancariaPage() {
 
   // Cargar cartola bancaria demo
   const handleLoadDemoStatement = () => {
-    setTransactions(
+    saveTransactions(
       DEMO_BANK_TRANSACTIONS.map((t) => ({
         ...t,
         organization_id: activeOrgId !== 'all' ? activeOrgId : t.organization_id,
@@ -143,7 +173,7 @@ export default function ConciliacionBancariaPage() {
             'No se encontraron filas con cargos bancarios válidos en el archivo. Verifica que contenga columnas de Fecha, Glosa/Descripción y Cargos/Débitos.'
           );
         } else {
-          setTransactions(parsed.transactions);
+          saveTransactions(parsed.transactions);
           setHasReconciled(false);
           setUploadSuccess(
             `Se importaron ${parsed.transactions.length} movimientos bancarios de ${parsed.bankName} correctamente.`
@@ -158,7 +188,7 @@ export default function ConciliacionBancariaPage() {
 
   // Aceptar sugerencia de cotejo
   const handleAcceptSuggestion = (txId: string) => {
-    setTransactions((prev) =>
+    saveTransactions((prev) =>
       prev.map((t) => (t.id === txId ? { ...t, status: 'matched' } : t))
     );
   };
@@ -177,7 +207,7 @@ export default function ConciliacionBancariaPage() {
       notes: `Gasto registrado desde movimiento bancario N° ${tx.operation_number || 'S/N'} (${tx.bank_name || 'Banco'})`,
     });
 
-    setTransactions((prev) =>
+    saveTransactions((prev) =>
       prev.map((t) =>
         t.id === tx.id
           ? {
@@ -197,7 +227,7 @@ export default function ConciliacionBancariaPage() {
     const tx = transactions.find((t) => t.id === txId);
     if (tx) {
       setDeletedTx(tx);
-      setTransactions((prev) => prev.filter((t) => t.id !== txId));
+      saveTransactions((prev) => prev.filter((t) => t.id !== txId));
       setUploadError(null);
     }
   };
@@ -205,7 +235,7 @@ export default function ConciliacionBancariaPage() {
   // Deshacer la eliminación del último movimiento
   const handleUndoDelete = () => {
     if (deletedTx) {
-      setTransactions((prev) => [deletedTx, ...prev]);
+      saveTransactions((prev) => [deletedTx, ...prev]);
       setDeletedTx(null);
     }
   };
@@ -213,7 +243,7 @@ export default function ConciliacionBancariaPage() {
   // Vaciar toda la cartola de movimientos
   const handleClearAllTransactions = () => {
     if (window.confirm('¿Deseas vaciar todos los movimientos bancarios de la cartola actual?')) {
-      setTransactions([]);
+      saveTransactions([]);
       setHasReconciled(false);
       setBankFile(null);
       setUploadSuccess(null);
@@ -557,8 +587,43 @@ export default function ConciliacionBancariaPage() {
               <tbody className="divide-y">
                 {filteredTransactions.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
-                      No se encontraron movimientos bancarios con los criterios de búsqueda actuales.
+                    <td colSpan={7} className="px-4 py-12 text-center text-muted-foreground">
+                      <div className="flex flex-col items-center justify-center gap-3">
+                        <Landmark className="w-10 h-10 text-muted-foreground/40" />
+                        <div>
+                          <p className="font-semibold text-foreground text-sm">
+                            No hay movimientos bancarios en la cartola
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            Sube la cartola de tu banco en Excel o CSV para cotejar gastos automáticamente.
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap items-center justify-center gap-2 mt-1">
+                          <label className="cursor-pointer">
+                            <input
+                              type="file"
+                              accept=".xlsx, .xls, .csv"
+                              className="hidden"
+                              onChange={handleFileUpload}
+                            />
+                            <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white gap-1.5 text-xs font-semibold" asChild>
+                              <span>
+                                <UploadCloud className="h-4 w-4" />
+                                Subir Cartola Bancaria
+                              </span>
+                            </Button>
+                          </label>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={handleLoadDemoStatement}
+                            className="text-xs text-muted-foreground hover:text-foreground"
+                          >
+                            <Sparkles className="h-3.5 w-3.5 mr-1 text-amber-500" />
+                            Cargar Ejemplo Demo
+                          </Button>
+                        </div>
+                      </div>
                     </td>
                   </tr>
                 ) : (

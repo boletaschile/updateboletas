@@ -18,6 +18,7 @@ import {
   Landmark,
   Clock,
   Briefcase,
+  TrendingUp,
   X,
 } from 'lucide-react';
 import { OrganizationSwitcher } from './organization-switcher';
@@ -80,6 +81,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       badgeColor: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300',
     },
     { label: 'Conciliación Bancaria', href: '/conciliacion-bancaria', icon: Landmark, badge: 'Banco' },
+    { label: 'Libro de Ventas', href: '/libro-ventas', icon: TrendingUp, badge: 'F29' },
     { label: 'Libro de Compras', href: '/libro-compras', icon: BookOpen, badge: 'F29' },
     { label: 'Presupuestos', href: '/budgets', icon: PieChart },
     { label: 'Categorías', href: '/categories', icon: Tags },
