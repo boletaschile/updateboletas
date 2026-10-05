@@ -231,19 +231,22 @@ export default function CuentasPorPagarPage() {
     };
   };
 
-  // Scoping por organización activa
+  const isPersonalMode = activeOrg?.type === 'personal' || activeOrgId === 'org-personal';
+
+  // Scoping por organización activa: Aislamiento total de entorno
   const orgDebts = useMemo(() => {
     return debts.filter((d) => {
-      if (activeOrgId !== 'all') {
-        if (activeOrgId === 'org-personal') {
-          if (d.expense_type !== 'personal' && d.organization_id !== 'org-personal') return false;
-        } else {
-          if (d.organization_id && d.organization_id !== activeOrgId) return false;
+      if (isPersonalMode) {
+        return d.expense_type === 'personal';
+      } else {
+        if (d.expense_type === 'personal') return false;
+        if (activeOrgId && activeOrgId !== 'all') {
+          return d.organization_id === activeOrgId || (!d.organization_id && d.expense_type === 'business');
         }
+        return d.expense_type === 'business';
       }
-      return true;
     });
-  }, [debts, activeOrgId]);
+  }, [debts, activeOrgId, isPersonalMode]);
 
   // Filtrado de la lista
   const filteredDebts = useMemo(() => {

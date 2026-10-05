@@ -14,7 +14,7 @@ import { FileSpreadsheet, Download, Filter, Calendar, BarChart3, Building2, User
 
 export default function ReportsPage() {
   const { receipts, categories, debts } = useReceipts();
-  const { activeOrgId } = useAuth();
+  const { activeOrgId, activeOrg } = useAuth();
 
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -22,14 +22,14 @@ export default function ReportsPage() {
   const [selectedType, setSelectedType] = useState('all');
 
   const scopedPaidDebts = useMemo(() => {
+    const isPersonal = activeOrg?.type === 'personal' || activeOrgId === 'org-personal';
     return debts.filter((d) => {
       if (d.status !== 'paid') return false;
-      if (activeOrgId !== 'all') {
-        if (activeOrgId === 'org-personal') {
-          if (d.expense_type !== 'personal' && d.organization_id !== 'org-personal') return false;
-        } else {
-          if (d.organization_id && d.organization_id !== activeOrgId) return false;
-        }
+      if (isPersonal) {
+        if (d.expense_type !== 'personal' && d.organization_id !== 'org-personal') return false;
+      } else {
+        if (d.expense_type === 'personal') return false;
+        if (d.organization_id && d.organization_id !== activeOrgId) return false;
       }
       const paidDate = d.paid_at ? d.paid_at.split('T')[0] : d.due_date;
       if (dateFrom && paidDate < dateFrom) return false;
@@ -37,7 +37,7 @@ export default function ReportsPage() {
       if (selectedType !== 'all' && d.expense_type !== selectedType) return false;
       return true;
     });
-  }, [debts, activeOrgId, dateFrom, dateTo, selectedType]);
+  }, [debts, activeOrgId, activeOrg, dateFrom, dateTo, selectedType]);
 
   const paidDebtsBusiness = scopedPaidDebts
     .filter((d) => d.expense_type === 'business')
@@ -50,14 +50,14 @@ export default function ReportsPage() {
   const totalPaidDebts = paidDebtsBusiness + paidDebtsPersonal;
 
   const filteredReceipts = useMemo(() => {
+    const isPersonal = activeOrg?.type === 'personal' || activeOrgId === 'org-personal';
     return receipts.filter((r) => {
       // Scoping por organización activa
-      if (activeOrgId !== 'all') {
-        if (activeOrgId === 'org-personal') {
-          if (r.expense_type !== 'personal' && r.organization_id !== 'org-personal') return false;
-        } else {
-          if (r.organization_id && r.organization_id !== activeOrgId) return false;
-        }
+      if (isPersonal) {
+        if (r.expense_type !== 'personal' && r.organization_id !== 'org-personal') return false;
+      } else {
+        if (r.expense_type === 'personal') return false;
+        if (r.organization_id && r.organization_id !== activeOrgId) return false;
       }
 
       if (dateFrom && r.document_date && r.document_date < dateFrom) return false;

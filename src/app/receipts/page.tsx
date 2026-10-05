@@ -35,7 +35,7 @@ import { useAuth } from '@/lib/store/auth-context';
 export default function ReceiptsListPage() {
   const router = useRouter();
   const { receipts, deleteReceipt, approveReceipt, debts } = useReceipts();
-  const { activeOrgId } = useAuth();
+  const { activeOrgId, activeOrg } = useAuth();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
@@ -54,21 +54,23 @@ export default function ReceiptsListPage() {
   const inSelectedMonth = (value?: string | null) =>
     selectedMonth === ALL_MONTHS || monthKeyOf(value) === selectedMonth;
 
+  const isPersonalMode = activeOrg?.type === 'personal' || activeOrgId === 'org-personal';
+
   const scopedPaidDebts = useMemo(() => {
     return debts.filter((d) => {
       if (d.status !== 'paid') return false;
       if (!inSelectedMonth(d.paid_at || d.due_date)) return false;
-      if (activeOrgId !== 'all') {
-        if (activeOrgId === 'org-personal') {
-          if (d.expense_type !== 'personal' && d.organization_id !== 'org-personal') return false;
-        } else {
-          if (d.organization_id && d.organization_id !== activeOrgId) return false;
+      if (isPersonalMode) {
+        return d.expense_type === 'personal';
+      } else {
+        if (d.expense_type === 'personal') return false;
+        if (activeOrgId && activeOrgId !== 'all') {
+          return d.organization_id === activeOrgId || (!d.organization_id && d.expense_type === 'business');
         }
+        return d.expense_type === 'business';
       }
-      return true;
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debts, activeOrgId, selectedMonth]);
+  }, [debts, activeOrgId, isPersonalMode, selectedMonth]);
 
   const paidDebtsBusiness = scopedPaidDebts
     .filter((d) => d.expense_type === 'business')
@@ -78,18 +80,23 @@ export default function ReceiptsListPage() {
     .filter((d) => d.expense_type === 'personal')
     .reduce((acc, d) => acc + (d.paid_amount || d.installment_amount || d.amount), 0);
 
-  const totalPaidDebts = paidDebtsBusiness + paidDebtsPersonal;
+  const totalPaidDebts = isPersonalMode ? paidDebtsPersonal : paidDebtsBusiness;
 
-  // Boletas de la organización activa (antes de filtrar por mes), para contar por mes
+  // Boletas de la organización activa: separación estricta
   const orgReceipts = useMemo(() => {
     return receipts.filter((r) => {
-      if (activeOrgId === 'all') return true;
-      if (activeOrgId === 'org-personal') {
-        return !(r.expense_type !== 'personal' && r.organization_id !== 'org-personal');
+      if (r.status === 'rejected') return false;
+      if (isPersonalMode) {
+        return r.expense_type === 'personal';
+      } else {
+        if (r.expense_type === 'personal') return false;
+        if (activeOrgId && activeOrgId !== 'all') {
+          return r.organization_id === activeOrgId || (!r.organization_id && r.expense_type === 'business');
+        }
+        return r.expense_type === 'business';
       }
-      return !(r.organization_id && r.organization_id !== activeOrgId);
     });
-  }, [receipts, activeOrgId]);
+  }, [receipts, activeOrgId, isPersonalMode]);
 
   const monthCounts = useMemo(() => {
     const counts: Record<string, number> = {};

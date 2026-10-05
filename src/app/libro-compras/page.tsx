@@ -46,12 +46,12 @@ export default function LibroComprasPage() {
         const k = monthKeyOf(r.document_date);
         if (k && k !== targetPeriodKey) return false;
       }
-      if (activeOrgId !== 'all') {
-        if (activeOrgId === 'org-personal') {
-          if (r.expense_type !== 'personal' && r.organization_id !== 'org-personal') return false;
-        } else {
-          if (r.organization_id && r.organization_id !== activeOrgId) return false;
-        }
+      const isPersonal = activeOrg?.type === 'personal' || activeOrgId === 'org-personal';
+      if (isPersonal) {
+        if (r.expense_type !== 'personal' && r.organization_id !== 'org-personal') return false;
+      } else {
+        if (r.expense_type === 'personal') return false;
+        if (r.organization_id && r.organization_id !== activeOrgId) return false;
       }
       if (docTypeFilter !== 'all' && r.document_type !== docTypeFilter) return false;
       return true;

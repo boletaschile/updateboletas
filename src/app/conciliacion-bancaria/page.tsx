@@ -52,19 +52,15 @@ export default function ConciliacionBancariaPage() {
 
   // Comprobantes filtrados según la organización / perfil activo
   const scopedReceipts = useMemo(() => {
+    const isPersonal = activeOrg?.type === 'personal' || activeOrgId === 'org-personal';
     return receipts.filter((r) => {
-      if (activeOrgId === 'all') return true;
-      if (activeOrg?.type === 'personal' || activeOrgId === 'org-personal') {
-        return (
-          r.expense_type === 'personal' ||
-          r.organization_id === activeOrgId ||
-          r.organization_id === 'org-personal' ||
-          !r.organization_id
-        );
+      if (isPersonal) {
+        return r.expense_type === 'personal' || r.organization_id === 'org-personal';
       }
+      if (r.expense_type === 'personal') return false;
       return (
         r.organization_id === activeOrgId ||
-        (r.expense_type === 'business' && (!r.organization_id || r.organization_id === 'org-empresa-1'))
+        (!r.organization_id || r.organization_id === 'org-empresa-1')
       );
     });
   }, [receipts, activeOrgId, activeOrg]);

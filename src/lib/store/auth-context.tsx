@@ -76,12 +76,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (savedOrgs) {
-        setOrganizations(JSON.parse(savedOrgs));
+        const parsedOrgs: Organization[] = JSON.parse(savedOrgs);
+        setOrganizations(parsedOrgs);
+        if (savedActiveOrg && savedActiveOrg !== 'all' && parsedOrgs.some((o) => o.id === savedActiveOrg)) {
+          setActiveOrgId(savedActiveOrg);
+        } else if (parsedOrgs.length > 0) {
+          const defaultBiz = parsedOrgs.find((o) => o.type === 'business');
+          setActiveOrgId(defaultBiz ? defaultBiz.id : parsedOrgs[0].id);
+        }
       } else {
         setOrganizations([]);
       }
 
-      if (savedActiveOrg) setActiveOrgId(savedActiveOrg);
       if (savedMembers) setMembers(JSON.parse(savedMembers));
 
       // Sincronizar usuario activo de Supabase si está disponible

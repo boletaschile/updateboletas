@@ -131,19 +131,22 @@ export default function CuentasPorCobrarPage() {
     }
   };
 
-  // Filtrado por organización activa
+  const isPersonalMode = activeOrg?.type === 'personal' || activeOrgId === 'org-personal';
+
+  // Filtrado por organización activa: Aislamiento total de entorno
   const orgReceivables = useMemo(() => {
     return receivables.filter((r) => {
-      if (activeOrgId !== 'all') {
-        if (activeOrgId === 'org-personal') {
-          if (r.income_type !== 'personal' && r.organization_id !== 'org-personal') return false;
-        } else {
-          if (r.organization_id && r.organization_id !== activeOrgId) return false;
+      if (isPersonalMode) {
+        return r.income_type === 'personal';
+      } else {
+        if (r.income_type === 'personal') return false;
+        if (activeOrgId && activeOrgId !== 'all') {
+          return r.organization_id === activeOrgId || (!r.organization_id && r.income_type === 'business');
         }
+        return r.income_type === 'business';
       }
-      return true;
     });
-  }, [receivables, activeOrgId]);
+  }, [receivables, activeOrgId, isPersonalMode]);
 
   // Filtrado de la lista con búsqueda y filtros
   const filteredReceivables = useMemo(() => {

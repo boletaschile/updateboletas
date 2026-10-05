@@ -31,29 +31,29 @@ export function OrganizationSwitcher() {
           className="w-full flex items-center justify-between p-2.5 rounded-xl border bg-card hover:bg-muted/50 transition-all text-left shadow-sm group"
         >
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="h-8 w-8 rounded-lg bg-blue-100 dark:bg-blue-900/50 text-blue-600 flex items-center justify-center flex-shrink-0">
-              {activeOrgId === 'all' ? (
-                <Globe className="h-4 w-4" />
-              ) : activeOrg?.type === 'personal' ? (
-                <User className="h-4 w-4 text-emerald-600" />
+            <div
+              className={`h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                activeOrg?.type === 'personal'
+                  ? 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-600'
+                  : 'bg-blue-100 dark:bg-blue-900/50 text-blue-600'
+              }`}
+            >
+              {activeOrg?.type === 'personal' ? (
+                <User className="h-4 w-4" />
               ) : (
                 <Building2 className="h-4 w-4" />
               )}
             </div>
             <div className="min-w-0">
               <span className="font-semibold text-xs text-foreground block truncate">
-                {activeOrgId === 'all'
-                  ? 'Vista Consolidada (Todas)'
-                  : activeOrg?.name || 'Seleccionar Perfil'}
+                {activeOrg?.name || (organizations[0]?.name ?? 'Seleccionar Perfil')}
               </span>
               <span className="text-[10px] text-muted-foreground block truncate">
-                {activeOrgId === 'all'
-                  ? 'Todas las empresas'
+                {activeOrg?.type === 'personal'
+                  ? '👤 Modo Personal'
                   : activeOrg?.rut
-                  ? `RUT: ${activeOrg.rut}`
-                  : activeOrg?.type === 'personal'
-                  ? 'Persona Natural'
-                  : 'Empresa'}
+                  ? `🏢 RUT: ${activeOrg.rut}`
+                  : '🏢 Modo Empresa'}
               </span>
             </div>
           </div>
@@ -71,30 +71,12 @@ export function OrganizationSwitcher() {
                 Seleccionar Empresa o Cuenta
               </div>
 
-              {/* Vista Consolidada */}
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveOrgId('all');
-                  setIsOpen(false);
-                }}
-                className={`w-full flex items-center justify-between p-2 rounded-lg transition-colors ${
-                  activeOrgId === 'all'
-                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold'
-                    : 'hover:bg-muted text-foreground'
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <Globe className="h-4 w-4 text-blue-600" />
-                  <span>Vista Consolidada (Todas)</span>
-                </div>
-                {activeOrgId === 'all' && <Check className="h-3.5 w-3.5 text-blue-600" />}
-              </button>
-
-              <div className="h-px bg-border my-1" />
-
-              {/* Listado de Organizaciones */}
-              {organizations.map((org) => (
+              {/* Listado de Empresas */}
+              <div className="px-2 py-1 text-[10px] font-bold uppercase text-blue-700 dark:text-blue-300 flex items-center gap-1.5">
+                <Building2 className="h-3 w-3" />
+                <span>Empresas Registradas</span>
+              </div>
+              {organizations.filter((o) => o.type === 'business').map((org) => (
                 <button
                   key={org.id}
                   type="button"
@@ -109,11 +91,7 @@ export function OrganizationSwitcher() {
                   }`}
                 >
                   <div className="flex items-center gap-2 min-w-0">
-                    {org.type === 'personal' ? (
-                      <User className="h-4 w-4 text-emerald-600 flex-shrink-0" />
-                    ) : (
-                      <Building2 className="h-4 w-4 text-blue-600 flex-shrink-0" />
-                    )}
+                    <Building2 className="h-4 w-4 text-blue-600 flex-shrink-0" />
                     <div className="truncate">
                       <p className="truncate leading-tight">{org.name}</p>
                       {org.rut && (
@@ -122,6 +100,40 @@ export function OrganizationSwitcher() {
                     </div>
                   </div>
                   {activeOrgId === org.id && <Check className="h-3.5 w-3.5 text-blue-600 flex-shrink-0" />}
+                </button>
+              ))}
+
+              <div className="h-px bg-border my-1" />
+
+              {/* Listado de Personas Naturales */}
+              <div className="px-2 py-1 text-[10px] font-bold uppercase text-emerald-700 dark:text-emerald-300 flex items-center gap-1.5">
+                <User className="h-3 w-3" />
+                <span>Finanzas Personales</span>
+              </div>
+              {organizations.filter((o) => o.type === 'personal').map((org) => (
+                <button
+                  key={org.id}
+                  type="button"
+                  onClick={() => {
+                    setActiveOrgId(org.id);
+                    setIsOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between p-2 rounded-lg transition-colors text-left ${
+                    activeOrgId === org.id
+                      ? 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 font-semibold'
+                      : 'hover:bg-muted text-foreground'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <User className="h-4 w-4 text-emerald-600 flex-shrink-0" />
+                    <div className="truncate">
+                      <p className="truncate leading-tight">{org.name}</p>
+                      {org.rut && (
+                        <p className="text-[10px] text-muted-foreground font-mono">{org.rut}</p>
+                      )}
+                    </div>
+                  </div>
+                  {activeOrgId === org.id && <Check className="h-3.5 w-3.5 text-emerald-600 flex-shrink-0" />}
                 </button>
               ))}
 
