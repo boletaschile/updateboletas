@@ -29,6 +29,16 @@ interface AuthContextType {
     legal_name?: string;
     type: 'business' | 'personal';
   }) => Organization;
+  updateOrganization: (
+    id: string,
+    data: {
+      name: string;
+      rut?: string | null;
+      legal_name?: string | null;
+      type?: 'business' | 'personal';
+    }
+  ) => void;
+  deleteOrganization: (id: string) => boolean;
   inviteMember: (orgId: string, email: string, role: UserRole) => void;
   removeMember: (orgId: string, memberId: string) => void;
 }
@@ -298,6 +308,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return newOrg;
   };
 
+  const updateOrganization = (
+    id: string,
+    data: {
+      name: string;
+      rut?: string | null;
+      legal_name?: string | null;
+      type?: 'business' | 'personal';
+    }
+  ) => {
+    setOrganizations((prev) =>
+      prev.map((org) => {
+        if (org.id !== id) return org;
+        return {
+          ...org,
+          name: data.name.trim(),
+          rut: data.rut !== undefined ? (data.rut ? data.rut.trim() : null) : org.rut,
+          legal_name:
+            data.legal_name !== undefined
+              ? (data.legal_name ? data.legal_name.trim() : data.name.trim())
+              : org.legal_name,
+          type: data.type || org.type,
+          updated_at: new Date().toISOString(),
+        };
+      })
+    );
+  };
+
+  const deleteOrganization = (id: string): boolean => {
+    if (organizations.length <= 1) return false;
+    setOrganizations((prev) => prev.filter((o) => o.id !== id));
+    if (activeOrgId === id) {
+      const remaining = organizations.filter((o) => o.id !== id);
+      setActiveOrgId(remaining[0]?.id || 'all');
+    }
+    return true;
+  };
+
   const inviteMember = (orgId: string, email: string, role: UserRole) => {
     const newMember: OrganizationMember = {
       id: `m-${Date.now()}`,
@@ -344,6 +391,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         logout,
         setActiveOrgId,
         createOrganization,
+        updateOrganization,
+        deleteOrganization,
         inviteMember,
         removeMember,
       }}

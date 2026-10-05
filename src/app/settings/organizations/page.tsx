@@ -9,7 +9,8 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/lib/store/auth-context';
 import { NewOrganizationModal } from '@/components/organizations/new-organization-modal';
-import { UserRole } from '@/types';
+import { EditOrganizationModal } from '@/components/organizations/edit-organization-modal';
+import { UserRole, Organization } from '@/types';
 import {
   Building2,
   User,
@@ -21,11 +22,13 @@ import {
   CheckCircle2,
   UserPlus,
   Briefcase,
+  Pencil,
 } from 'lucide-react';
 
 export default function OrganizationsManagementPage() {
   const { organizations, members, inviteMember, removeMember, activeOrgId, setActiveOrgId } = useAuth();
   const [isNewOrgModalOpen, setIsNewOrgModalOpen] = useState(false);
+  const [editingOrg, setEditingOrg] = useState<Organization | null>(null);
 
   // Estados para invitar miembro
   const [selectedOrgIdForInvite, setSelectedOrgIdForInvite] = useState<string>(
@@ -84,10 +87,10 @@ export default function OrganizationsManagementPage() {
                     : 'hover:border-border/80'
                 }`}
               >
-                <CardHeader className="py-4 border-b flex flex-row items-start justify-between">
-                  <div className="flex items-center gap-2.5">
+                <CardHeader className="py-4 border-b flex flex-row items-start justify-between gap-2">
+                  <div className="flex items-center gap-2.5 min-w-0">
                     <div
-                      className={`h-9 w-9 rounded-xl flex items-center justify-center ${
+                      className={`h-9 w-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
                         org.type === 'personal'
                           ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300'
                           : 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300'
@@ -99,26 +102,38 @@ export default function OrganizationsManagementPage() {
                         <Building2 className="h-4 w-4" />
                       )}
                     </div>
-                    <div>
-                      <CardTitle className="text-sm">{org.name}</CardTitle>
+                    <div className="min-w-0">
+                      <CardTitle className="text-sm truncate">{org.name}</CardTitle>
                       <CardDescription className="text-[11px] font-mono">
                         {org.rut ? `RUT: ${org.rut}` : 'Persona Natural'}
                       </CardDescription>
                     </div>
                   </div>
-                  <Badge
-                    variant={org.type === 'personal' ? 'success' : 'info'}
-                    className="text-[10px]"
-                  >
-                    {org.type === 'personal' ? 'Personal' : 'Empresa'}
-                  </Badge>
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setEditingOrg(org)}
+                      className="h-7 px-2 text-xs gap-1 text-muted-foreground hover:text-foreground"
+                      title="Editar datos de este perfil"
+                    >
+                      <Pencil className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                      <span className="hidden sm:inline">Editar</span>
+                    </Button>
+                    <Badge
+                      variant={org.type === 'personal' ? 'success' : 'info'}
+                      className="text-[10px]"
+                    >
+                      {org.type === 'personal' ? 'Personal' : 'Empresa'}
+                    </Badge>
+                  </div>
                 </CardHeader>
 
                 <CardContent className="p-4 space-y-3 text-xs">
                   {org.legal_name && (
                     <div>
                       <span className="text-[10px] text-muted-foreground uppercase block font-semibold">
-                        Razón Social
+                        {org.type === 'personal' ? 'Nombre Completo / Alias' : 'Razón Social'}
                       </span>
                       <p className="text-xs text-foreground truncate">{org.legal_name}</p>
                     </div>
@@ -151,14 +166,24 @@ export default function OrganizationsManagementPage() {
                     </div>
                   </div>
 
-                  <div className="pt-2 flex items-center justify-between">
+                  <div className="pt-2 flex items-center gap-2">
                     <Button
                       size="sm"
                       variant={isActive ? 'default' : 'outline'}
                       onClick={() => setActiveOrgId(org.id)}
-                      className="w-full text-xs"
+                      className="flex-1 text-xs"
                     >
                       {isActive ? 'Empresa Seleccionada Actualmente' : 'Cambiar a esta Empresa'}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setEditingOrg(org)}
+                      className="text-xs px-2.5 gap-1 text-muted-foreground hover:text-foreground"
+                      title="Editar perfil"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                      <span className="hidden sm:inline">Editar</span>
                     </Button>
                   </div>
                 </CardContent>
@@ -240,6 +265,12 @@ export default function OrganizationsManagementPage() {
       <NewOrganizationModal
         isOpen={isNewOrgModalOpen}
         onClose={() => setIsNewOrgModalOpen(false)}
+      />
+
+      <EditOrganizationModal
+        isOpen={!!editingOrg}
+        onClose={() => setEditingOrg(null)}
+        organization={editingOrg}
       />
     </AppLayout>
   );
