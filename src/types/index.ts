@@ -38,6 +38,7 @@ export interface MonthlyFixedExpenses {
   assigned_salary?: number; // Sueldo asignado del dueño en CLP
   rent?: number; // Arriendo oficina / local / bodega
   internet?: number; // Internet / Telecomunicaciones
+  mobile?: number; // Telefonía Móvil / Plan Celular (Mobile)
   electricity?: number; // Luz / Electricidad
   water?: number; // Agua potable
   other_fixed?: number; // Otros gastos fijos mensuales

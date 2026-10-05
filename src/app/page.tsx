@@ -221,6 +221,7 @@ export default function DashboardPage() {
   const operationalFixedExpenses = !isPersonalMode && activeOrg?.monthly_expenses
     ? (Number(activeOrg.monthly_expenses.rent) || 0) +
       (Number(activeOrg.monthly_expenses.internet) || 0) +
+      (Number(activeOrg.monthly_expenses.mobile) || 0) +
       (Number(activeOrg.monthly_expenses.electricity) || 0) +
       (Number(activeOrg.monthly_expenses.water) || 0) +
       (Number(activeOrg.monthly_expenses.other_fixed) || 0)
@@ -566,14 +567,15 @@ export default function DashboardPage() {
                   <span>Libro de Compras</span>
                 </Button>
               </Link>
-              <Button
-                variant="outline"
-                onClick={() => setIsAssignSalaryModalOpen(true)}
-                className="border-amber-400/40 bg-amber-950/40 text-amber-200 hover:bg-amber-900/60 gap-1.5 font-medium text-xs"
-              >
-                <Briefcase className="h-4 w-4 text-amber-400" />
-                <span>Asignar Sueldos</span>
-              </Button>
+              <Link href="/costos-fijos">
+                <Button
+                  variant="outline"
+                  className="border-amber-400/40 bg-amber-950/40 text-amber-200 hover:bg-amber-900/60 gap-1.5 font-medium text-xs"
+                >
+                  <Landmark className="h-4 w-4 text-amber-400" />
+                  <span>Costos Fijos & Sueldos</span>
+                </Button>
+              </Link>
               <Button
                 onClick={() => setIsAddExpenseOpen(true)}
                 className="bg-white text-slate-950 hover:bg-slate-100 gap-2 font-semibold shadow-md text-xs"
@@ -1201,13 +1203,22 @@ export default function DashboardPage() {
                     ? `Fijos: ${formatCLP(operationalFixedExpenses)}`
                     : 'Sin configurar'}
                 </span>
-                <button
-                  type="button"
-                  onClick={() => setIsAssignSalaryModalOpen(true)}
-                  className="text-blue-600 dark:text-blue-400 hover:underline font-semibold ml-1 cursor-pointer"
-                >
-                  Editar
-                </button>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <Link
+                    href="/costos-fijos"
+                    className="text-blue-600 dark:text-blue-400 hover:underline font-semibold ml-1"
+                  >
+                    Ver detalle
+                  </Link>
+                  <span className="text-muted-foreground/40">•</span>
+                  <button
+                    type="button"
+                    onClick={() => setIsAssignSalaryModalOpen(true)}
+                    className="text-blue-600 dark:text-blue-400 hover:underline font-semibold cursor-pointer"
+                  >
+                    Editar
+                  </button>
+                </div>
               </div>
             </Card>
 

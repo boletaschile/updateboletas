@@ -83,6 +83,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     },
     { label: 'Conciliación Bancaria', href: '/conciliacion-bancaria', icon: Landmark, badge: 'Banco' },
     { label: 'Flujo de Caja', href: '/flujo-de-caja', icon: Wallet, badge: 'Caja' },
+    { label: 'Costos Fijos & Sueldos', href: '/costos-fijos', icon: Landmark, badge: 'Fijos' },
     { label: 'Libro de Ventas', href: '/libro-ventas', icon: TrendingUp, badge: 'F29' },
     { label: 'Libro de Compras', href: '/libro-compras', icon: BookOpen, badge: 'F29' },
     { label: 'Presupuestos', href: '/budgets', icon: PieChart },

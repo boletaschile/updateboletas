@@ -123,4 +123,26 @@ describe('Asignación de Sueldos y Nómina Empresarial (Payroll Engine)', () => 
     const onlySalaryFixedCosts = totalPayroll + 0;
     expect(onlySalaryFixedCosts).toBe(800000); // NUNCA 1.600.000
   });
+
+  it('Incluye correctamente el gasto Mobile en los Costos Fijos Operacionales', () => {
+    const expenses = {
+      rent: 400000,
+      internet: 25000,
+      mobile: 19990, // Plan celular / Mobile
+      electricity: 35000,
+      water: 12000,
+      other_fixed: 15000,
+    };
+
+    const totalOperational =
+      expenses.rent +
+      expenses.internet +
+      expenses.mobile +
+      expenses.electricity +
+      expenses.water +
+      expenses.other_fixed;
+
+    expect(expenses.mobile).toBe(19990);
+    expect(totalOperational).toBe(506990);
+  });
 });

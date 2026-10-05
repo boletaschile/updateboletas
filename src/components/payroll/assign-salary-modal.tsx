@@ -36,6 +36,7 @@ import {
   Droplets,
   Receipt,
   Landmark,
+  Smartphone,
 } from 'lucide-react';
 
 interface AssignSalaryModalProps {
@@ -84,6 +85,7 @@ export function AssignSalaryModal({
   // Estados del Formulario: Gastos Fijos Operacionales
   const [rent, setRent] = useState<number>(0);
   const [internet, setInternet] = useState<number>(0);
+  const [mobile, setMobile] = useState<number>(0);
   const [electricity, setElectricity] = useState<number>(0);
   const [water, setWater] = useState<number>(0);
   const [otherFixed, setOtherFixed] = useState<number>(0);
@@ -100,6 +102,7 @@ export function AssignSalaryModal({
       setTeamSalaries(currentOrg.team_salaries || []);
       setRent(exp.rent || 0);
       setInternet(exp.internet || 0);
+      setMobile(exp.mobile || 0);
       setElectricity(exp.electricity || 0);
       setWater(exp.water || 0);
       setOtherFixed(exp.other_fixed || 0);
@@ -133,7 +136,8 @@ export function AssignSalaryModal({
   // Cálculos de Totales
   const totalTeamSalaries = teamSalaries.reduce((acc, emp) => acc + (emp.amount || 0), 0);
   const totalPayroll = (assignedSalary || 0) + totalTeamSalaries;
-  const totalOperationalFixed = (rent || 0) + (internet || 0) + (electricity || 0) + (water || 0) + (otherFixed || 0);
+  const totalOperationalFixed =
+    (rent || 0) + (internet || 0) + (mobile || 0) + (electricity || 0) + (water || 0) + (otherFixed || 0);
   const grandTotalFixedAndSalaries = totalPayroll + totalOperationalFixed;
 
   // Guardar y Aplicar
@@ -154,6 +158,7 @@ export function AssignSalaryModal({
       monthly_expenses: {
         rent: rent || 0,
         internet: internet || 0,
+        mobile: mobile || 0,
         electricity: electricity || 0,
         water: water || 0,
         other_fixed: otherFixed || 0,
@@ -251,6 +256,23 @@ export function AssignSalaryModal({
           reminder_days_before: 3,
           expense_type: 'business',
           notes: 'Servicio mensual de internet y enlaces.',
+        });
+      }
+
+      if (mobile > 0 && !alreadyExists('Mobile') && !alreadyExists('Celular') && !alreadyExists('Móvil')) {
+        addDebt({
+          user_id: currentOrg.created_by || 'system',
+          organization_id: currentOrg.id,
+          supplier_name: `Telefonía Móvil / Mobile (${currentOrg.name})`,
+          document_number: `MOB-${monthPrefix}`,
+          document_type: 'otro',
+          category: 'servicios_basicos',
+          amount: mobile,
+          issue_date: `${monthPrefix}-01`,
+          due_date: `${monthPrefix}-16`,
+          reminder_days_before: 3,
+          expense_type: 'business',
+          notes: 'Plan celular y telefonía móvil de la empresa.',
         });
       }
 
@@ -416,7 +438,6 @@ export function AssignSalaryModal({
                       <Input
                         type="number"
                         min="0"
-                        step="50000"
                         value={assignedSalary || ''}
                         onChange={(e) => setAssignedSalary(Number(e.target.value) || 0)}
                         placeholder="Ej: 800000"
@@ -511,7 +532,6 @@ export function AssignSalaryModal({
                             <Input
                               type="number"
                               min="0"
-                              step="10000"
                               placeholder="Monto líquido"
                               value={emp.amount || ''}
                               onChange={(e) => handleUpdateEmployee(emp.id, 'amount', Number(e.target.value))}
@@ -569,10 +589,28 @@ export function AssignSalaryModal({
                       <Input
                         type="number"
                         min="0"
-                        step="10000"
                         value={rent || ''}
                         onChange={(e) => setRent(Number(e.target.value) || 0)}
                         placeholder="Ej: 450000"
+                        className="pl-7 font-mono font-bold text-xs"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Telefonía Móvil / Mobile */}
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium flex items-center gap-1 text-foreground">
+                      <Smartphone className="h-3.5 w-3.5 text-blue-600" />
+                      <span>Telefonía Móvil / Plan Celular (Mobile)</span>
+                    </Label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-2 text-muted-foreground font-mono font-bold">$</span>
+                      <Input
+                        type="number"
+                        min="0"
+                        value={mobile || ''}
+                        onChange={(e) => setMobile(Number(e.target.value) || 0)}
+                        placeholder="Ej: 19990"
                         className="pl-7 font-mono font-bold text-xs"
                       />
                     </div>
@@ -589,7 +627,6 @@ export function AssignSalaryModal({
                       <Input
                         type="number"
                         min="0"
-                        step="5000"
                         value={internet || ''}
                         onChange={(e) => setInternet(Number(e.target.value) || 0)}
                         placeholder="Ej: 35000"
@@ -609,7 +646,6 @@ export function AssignSalaryModal({
                       <Input
                         type="number"
                         min="0"
-                        step="5000"
                         value={electricity || ''}
                         onChange={(e) => setElectricity(Number(e.target.value) || 0)}
                         placeholder="Ej: 40000"
@@ -629,7 +665,6 @@ export function AssignSalaryModal({
                       <Input
                         type="number"
                         min="0"
-                        step="5000"
                         value={water || ''}
                         onChange={(e) => setWater(Number(e.target.value) || 0)}
                         placeholder="Ej: 15000"
@@ -649,10 +684,9 @@ export function AssignSalaryModal({
                       <Input
                         type="number"
                         min="0"
-                        step="10000"
                         value={otherFixed || ''}
                         onChange={(e) => setOtherFixed(Number(e.target.value) || 0)}
-                        placeholder="Ej: 60000"
+                        placeholder="Ej: 15000"
                         className="pl-7 font-mono font-bold text-xs"
                       />
                     </div>

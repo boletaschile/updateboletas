@@ -55,11 +55,12 @@ export default function CuentasPorPagarPage() {
     const salary = activeOrg.assigned_salary || exp.assigned_salary || 0;
     const rent = exp.rent || 0;
     const internet = exp.internet || 0;
+    const mobile = exp.mobile || 0;
     const electricity = exp.electricity || 0;
     const water = exp.water || 0;
     const otherFixed = exp.other_fixed || 0;
 
-    if (!salary && !rent && !internet && !electricity && !water && !otherFixed) {
+    if (!salary && !rent && !internet && !mobile && !electricity && !water && !otherFixed) {
       setLoadFixedMessage('Esta empresa aún no tiene sueldo asignado ni gastos fijos configurados en Empresas y Perfiles.');
       setTimeout(() => setLoadFixedMessage(null), 4000);
       return;
@@ -132,6 +133,24 @@ export default function CuentasPorPagarPage() {
         reminder_days_before: 3,
         expense_type: 'business',
         notes: 'Servicio mensual de internet y conectividad.',
+      });
+      count++;
+    }
+
+    if (mobile > 0 && !alreadyExists('Mobile') && !alreadyExists('Celular') && !alreadyExists('Móvil')) {
+      addDebt({
+        user_id: activeOrg.created_by || 'system',
+        organization_id: activeOrg.id,
+        supplier_name: `Telefonía Móvil / Mobile (${activeOrg.name})`,
+        document_number: `MOB-${monthPrefix}`,
+        document_type: 'servicio',
+        category: 'servicios_basicos',
+        amount: mobile,
+        issue_date: `${monthPrefix}-01`,
+        due_date: `${monthPrefix}-16`,
+        reminder_days_before: 3,
+        expense_type: 'business',
+        notes: 'Plan celular y telefonía móvil de la empresa.',
       });
       count++;
     }

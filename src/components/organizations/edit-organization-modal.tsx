@@ -29,6 +29,7 @@ import {
   Home,
   Receipt,
   Sparkles,
+  Smartphone,
 } from 'lucide-react';
 
 interface EditOrganizationModalProps {
@@ -53,6 +54,7 @@ export function EditOrganizationModal({
   const [assignedSalary, setAssignedSalary] = useState<number>(0);
   const [rent, setRent] = useState<number>(0);
   const [internet, setInternet] = useState<number>(0);
+  const [mobile, setMobile] = useState<number>(0);
   const [electricity, setElectricity] = useState<number>(0);
   const [water, setWater] = useState<number>(0);
   const [otherFixed, setOtherFixed] = useState<number>(0);
@@ -70,6 +72,7 @@ export function EditOrganizationModal({
       setAssignedSalary(organization.assigned_salary ?? exp.assigned_salary ?? 0);
       setRent(exp.rent ?? 0);
       setInternet(exp.internet ?? 0);
+      setMobile(exp.mobile ?? 0);
       setElectricity(exp.electricity ?? 0);
       setWater(exp.water ?? 0);
       setOtherFixed(exp.other_fixed ?? 0);
@@ -87,6 +90,7 @@ export function EditOrganizationModal({
     (assignedSalary || 0) +
     (rent || 0) +
     (internet || 0) +
+    (mobile || 0) +
     (electricity || 0) +
     (water || 0) +
     (otherFixed || 0);
@@ -106,6 +110,7 @@ export function EditOrganizationModal({
         assigned_salary: assignedSalary || 0,
         rent: rent || 0,
         internet: internet || 0,
+        mobile: mobile || 0,
         electricity: electricity || 0,
         water: water || 0,
         other_fixed: otherFixed || 0,
@@ -327,6 +332,21 @@ export function EditOrganizationModal({
                         value={internet || ''}
                         onChange={(e) => setInternet(Number(e.target.value) || 0)}
                         placeholder="Ej: 35000"
+                        className="text-xs font-mono"
+                      />
+                    </div>
+
+                    {/* Telefonía Móvil / Mobile */}
+                    <div className="space-y-1">
+                      <Label className="text-xs font-medium flex items-center gap-1 text-foreground">
+                        <Smartphone className="h-3.5 w-3.5 text-blue-600" />
+                        <span>Telefonía Móvil / Plan Celular</span>
+                      </Label>
+                      <Input
+                        type="number"
+                        value={mobile || ''}
+                        onChange={(e) => setMobile(Number(e.target.value) || 0)}
+                        placeholder="Ej: 19990"
                         className="text-xs font-mono"
                       />
                     </div>

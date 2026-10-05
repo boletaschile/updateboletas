@@ -185,6 +185,12 @@ export default function OrganizationsManagementPage() {
                                 <span className="font-medium text-foreground">{formatCLP(org.monthly_expenses.internet)}</span>
                               </div>
                             ) : null}
+                            {org.monthly_expenses.mobile ? (
+                              <div className="flex justify-between">
+                                <span>Móvil:</span>
+                                <span className="font-medium text-foreground">{formatCLP(org.monthly_expenses.mobile)}</span>
+                              </div>
+                            ) : null}
                             {org.monthly_expenses.electricity ? (
                               <div className="flex justify-between">
                                 <span>Luz:</span>
