@@ -31,7 +31,13 @@ import {
   BookOpen,
   Landmark,
   Briefcase,
+  Wallet,
+  AlertTriangle,
+  CalendarDays,
+  CheckCircle2,
+  FileCheck2,
 } from 'lucide-react';
+import { MonthlyClosingChecklist } from '@/components/dashboard/monthly-closing-checklist';
 import {
   BarChart,
   Bar,
@@ -149,6 +155,68 @@ export default function DashboardPage() {
   const overdueDebts = scopedDebts.filter((d) => d.status === 'overdue');
   const dueSoonDebts = scopedDebts.filter((d) => d.status === 'due_soon');
   const totalUrgentDebt = [...overdueDebts, ...dueSoonDebts].reduce((acc, d) => acc + d.amount, 0);
+
+  // -------------------------------------------------------------
+  // LOS 4 NÚMEROS DE SALUD PYME (Guía itsave)
+  // -------------------------------------------------------------
+  // 1. Ganancia Real: Ventas emitidas en el período - Gastos reales
+  const currentMonthReceivables = useMemo(() => {
+    return scopedReceivables.filter((r) => inSelectedMonth(r.issue_date || r.created_at));
+  }, [scopedReceivables, selectedMonth]);
+
+  const currentMonthSales = useMemo(() => {
+    return currentMonthReceivables.reduce((acc, r) => acc + r.total_amount, 0);
+  }, [currentMonthReceivables]);
+
+  const expenseForProfit = activeOrg?.type === 'personal' ? totalPersonal : (activeOrg?.type === 'business' ? totalBusiness : totalSpent);
+  const realProfit = currentMonthSales - expenseForProfit;
+
+  // 2. Saldo Operativo de Caja: Cuánto se cobró efectivamente menos cuánto se pagó
+  const collectedCash = useMemo(() => {
+    return scopedReceivables
+      .filter((r) => r.status === 'collected' && inSelectedMonth(r.collected_at || r.issue_date))
+      .reduce((acc, r) => acc + r.total_amount, 0);
+  }, [scopedReceivables, selectedMonth]);
+
+  const operationalCashFlow = collectedCash - totalSpent;
+
+  // 3. Cartera por Cobrar y Mora Crítica (> 30 días)
+  const overdueMore30Days = useMemo(() => {
+    const nowMs = Date.now();
+    return pendingReceivables.filter((r) => {
+      if (!r.due_date) return false;
+      const dueMs = new Date(r.due_date).getTime();
+      return (nowMs - dueMs) > 30 * 24 * 60 * 60 * 1000;
+    });
+  }, [pendingReceivables]);
+
+  const totalOverdueMore30 = useMemo(() => {
+    return overdueMore30Days.reduce((acc, r) => acc + r.total_amount, 0);
+  }, [overdueMore30Days]);
+
+  // 4. IVA Estimado F29 (Día 20)
+  const estimatedIvaDebito = Math.round((currentMonthSales * 0.19) / 1.19);
+  const estimatedIvaCredito = currentMonthReceipts
+    .filter((r) => r.expense_type === 'business')
+    .reduce((acc, r) => acc + (r.tax_amount || Math.round((r.business_total || r.total_amount) * 0.19 / 1.19)), 0);
+  const estimatedF29IvaToPay = Math.max(0, estimatedIvaDebito - estimatedIvaCredito);
+
+  // Fechas Duras Tributarias Chile
+  const today = new Date();
+  const currentDay = today.getDate();
+  const daysToPrevired = 13 - currentDay;
+  const daysToF29 = 20 - currentDay;
+
+  // Detección de gastos personales en cuenta empresa (Error #4 de la guía itsave)
+  const personalExpensesInBusinessCount = useMemo(() => {
+    if (activeOrg?.type !== 'business') return 0;
+    return currentMonthReceipts.filter((r) => r.expense_type === 'personal' || (r.personal_total || 0) > 0).length;
+  }, [activeOrg, currentMonthReceipts]);
+
+  const personalExpensesInBusinessAmount = useMemo(() => {
+    if (activeOrg?.type !== 'business') return 0;
+    return receiptsPersonal;
+  }, [activeOrg, receiptsPersonal]);
 
   // Datos para Gráfico de Categorías (Boletas + Compromisos Pagados)
   const categoryData = useMemo(() => {
@@ -363,7 +431,217 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Tarjetas de Indicadores Clave (KPIs) */}
+        {/* Fechas Duras del Calendario Tributario (Chile) */}
+        <div className="p-4 rounded-xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white border border-indigo-800/40 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4 text-xs">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-xl bg-indigo-500/20 border border-indigo-400/30 text-indigo-300 flex items-center justify-center flex-shrink-0">
+              <CalendarDays className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-sm text-white">Fechas Duras del Mes (Chile)</span>
+                <Badge className="bg-amber-500/20 text-amber-300 border-amber-500/30 text-[10px] py-0">
+                  Sin Prórroga
+                </Badge>
+              </div>
+              <p className="text-slate-300 text-[11px] mt-0.5">
+                Fechas clave para evitar multas de la DT y recargos por mora ante el SII.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800/90 border border-slate-700/80">
+              <Clock className="h-3.5 w-3.5 text-amber-400" />
+              <div>
+                <span className="font-semibold text-slate-200">Día 13: Previred</span>
+                <span className="text-[10px] text-slate-400 block">
+                  {daysToPrevired > 0 ? `Quedan ${daysToPrevired} día(s)` : daysToPrevired === 0 ? '¡Vence HOY!' : 'Período cumplido'}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800/90 border border-slate-700/80">
+              <FileCheck2 className="h-3.5 w-3.5 text-blue-400" />
+              <div>
+                <span className="font-semibold text-slate-200">Día 20: F29 (SII)</span>
+                <span className="text-[10px] text-slate-400 block">
+                  {daysToF29 > 0 ? `Quedan ${daysToF29} día(s)` : daysToF29 === 0 ? '¡Vence HOY!' : 'Declarado/Vencido'}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800/90 border border-slate-700/80">
+              <Sparkles className="h-3.5 w-3.5 text-emerald-400" />
+              <div>
+                <span className="font-semibold text-slate-200">Abril: F22</span>
+                <span className="text-[10px] text-slate-400 block">Operación Renta</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Alerta de Auditoría: Gastos Personales en Cuenta Empresa (Error #4 de la guía itsave) */}
+        {personalExpensesInBusinessCount > 0 && (
+          <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs">
+            <div className="flex items-start gap-3">
+              <div className="h-8 w-8 rounded-lg bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <AlertTriangle className="h-4 w-4" />
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <p className="font-bold text-amber-950 dark:text-amber-200">
+                    Alerta de Cierre: Gastos Personales Detectados en la Empresa
+                  </p>
+                  <Badge variant="outline" className="text-[10px] border-amber-400 text-amber-700 dark:text-amber-300">
+                    {personalExpensesInBusinessCount} boleta(s) • {formatCLP(personalExpensesInBusinessAmount)}
+                  </Badge>
+                </div>
+                <p className="text-amber-800 dark:text-amber-300 text-[11px] max-w-4xl">
+                  Mezclar gastos personales en la empresa distorsiona tu margen real y genera contingencias por <strong>gastos rechazados (Art. 21 LIR, 40% de castigo)</strong> ante el SII. Asigna un retiro o sueldo de dueño en lugar de pasar boletas personales.
+                </p>
+              </div>
+            </div>
+            <Link href="/receipts?type=personal">
+              <Button size="sm" variant="outline" className="text-xs border-amber-400 bg-white dark:bg-slate-900 text-amber-900 dark:text-amber-200 whitespace-nowrap">
+                Revisar Boletas
+              </Button>
+            </Link>
+          </div>
+        )}
+
+        {/* Los 4 Números de Salud Pyme (Metodología itsave) */}
+        <div className="space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+            <div className="flex items-center gap-2">
+              <div className="h-6 w-6 rounded-md bg-blue-600/10 text-blue-600 flex items-center justify-center">
+                <Sparkles className="h-3.5 w-3.5" />
+              </div>
+              <h3 className="font-bold text-base text-foreground">
+                Los 4 Números de Salud de tu Negocio
+              </h3>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Métricas clave para diagnosticar tu mes en 5 segundos sin ahogarte en datos.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* 1. Ganancia Real */}
+            <Card className="p-4 border-l-4 border-l-emerald-500 shadow-sm hover:shadow transition-shadow">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                  1. Ganancia Real del Mes
+                </span>
+                <div className="h-7 w-7 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 flex items-center justify-center">
+                  <TrendingUp className="h-3.5 w-3.5" />
+                </div>
+              </div>
+              <div className="mt-2">
+                <h4 className={`text-xl font-extrabold ${realProfit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                  {formatCLP(realProfit)}
+                </h4>
+                <p className="text-[10px] text-muted-foreground mt-1 truncate">
+                  Ventas ({formatCLP(currentMonthSales)}) - Gastos ({formatCLP(expenseForProfit)})
+                </p>
+              </div>
+              <div className="mt-2 pt-2 border-t border-border flex items-center justify-between text-[10px]">
+                <span className={realProfit >= 0 ? 'text-emerald-600 font-medium' : 'text-rose-600 font-medium'}>
+                  {realProfit >= 0 ? 'Margen Operativo Sano' : 'Alerta: Margen negativo'}
+                </span>
+                <span className="text-muted-foreground">Resultado neto</span>
+              </div>
+            </Card>
+
+            {/* 2. Saldo Operativo de Caja */}
+            <Card className="p-4 border-l-4 border-l-blue-500 shadow-sm hover:shadow transition-shadow">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                  2. Saldo Operativo de Caja
+                </span>
+                <div className="h-7 w-7 rounded-full bg-blue-100 dark:bg-blue-950/60 text-blue-600 flex items-center justify-center">
+                  <Wallet className="h-3.5 w-3.5" />
+                </div>
+              </div>
+              <div className="mt-2">
+                <h4 className={`text-xl font-extrabold ${operationalCashFlow >= 0 ? 'text-foreground' : 'text-rose-600 dark:text-rose-400'}`}>
+                  {formatCLP(operationalCashFlow)}
+                </h4>
+                <p className="text-[10px] text-muted-foreground mt-1 truncate">
+                  Cobrado ({formatCLP(collectedCash)}) - Pagado ({formatCLP(totalSpent)})
+                </p>
+              </div>
+              <div className="mt-2 pt-2 border-t border-border flex items-center justify-between text-[10px]">
+                <span className="text-blue-600 font-medium">Liquidez en Caja</span>
+                <span className="text-muted-foreground">Flujo neto</span>
+              </div>
+            </Card>
+
+            {/* 3. Cartera por Cobrar */}
+            <Card className="p-4 border-l-4 border-l-purple-500 shadow-sm hover:shadow transition-shadow">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                  3. Cartera por Cobrar
+                </span>
+                <div className="h-7 w-7 rounded-full bg-purple-100 dark:bg-purple-950/60 text-purple-600 flex items-center justify-center">
+                  <Briefcase className="h-3.5 w-3.5" />
+                </div>
+              </div>
+              <div className="mt-2">
+                <h4 className="text-xl font-extrabold text-purple-700 dark:text-purple-300">
+                  {formatCLP(totalPendingReceivable)}
+                </h4>
+                <p className="text-[10px] text-muted-foreground mt-1 truncate">
+                  {pendingReceivables.length} documento(s) por recaudar
+                </p>
+              </div>
+              <div className="mt-2 pt-2 border-t border-border flex items-center justify-between text-[10px]">
+                {totalOverdueMore30 > 0 ? (
+                  <span className="text-rose-600 font-semibold flex items-center gap-1 truncate">
+                    <AlertTriangle className="h-3 w-3 flex-shrink-0" />
+                    {formatCLP(totalOverdueMore30)} con &gt;30d mora
+                  </span>
+                ) : (
+                  <span className="text-emerald-600 font-medium">Sin mora &gt;30d</span>
+                )}
+                <Link href="/cuentas-por-cobrar" className="text-purple-600 hover:underline flex-shrink-0">
+                  Cobranza
+                </Link>
+              </div>
+            </Card>
+
+            {/* 4. IVA Estimado F29 (Día 20) */}
+            <Card className="p-4 border-l-4 border-l-amber-500 shadow-sm hover:shadow transition-shadow">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                  4. IVA Estimado F29 (Día 20)
+                </span>
+                <div className="h-7 w-7 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-600 flex items-center justify-center">
+                  <FileCheck2 className="h-3.5 w-3.5" />
+                </div>
+              </div>
+              <div className="mt-2">
+                <h4 className="text-xl font-extrabold text-amber-600 dark:text-amber-400">
+                  {formatCLP(estimatedF29IvaToPay)}
+                </h4>
+                <p className="text-[10px] text-muted-foreground mt-1 truncate">
+                  Débito ({formatCLP(estimatedIvaDebito)}) - Crédito ({formatCLP(estimatedIvaCredito)})
+                </p>
+              </div>
+              <div className="mt-2 pt-2 border-t border-border flex items-center justify-between text-[10px]">
+                <span className="text-amber-600 font-medium">Apartar para el día 20</span>
+                <Link href="/libro-compras" className="text-amber-600 hover:underline flex-shrink-0">
+                  F29
+                </Link>
+              </div>
+            </Card>
+          </div>
+        </div>
+
+        {/* Checklist de Cierre Financiero Mensual (Día 1, Día 15 y Cierre) */}
+        <MonthlyClosingChecklist currentMonthKey={selectedMonth} />
+
+        {/* Tarjetas de Indicadores Clave de Gastos y Presupuesto */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Total Gastado */}
           <Card className="p-5">
