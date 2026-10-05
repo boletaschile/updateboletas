@@ -61,9 +61,13 @@ export default function ReceiptsListPage() {
   const scopedPaidDebts = useMemo(() => {
     return debts.filter((d) => {
       if (d.status !== 'paid') return false;
-      if (!inSelectedMonth(d.paid_at || d.due_date)) return false;
+      if (selectedMonth !== ALL_MONTHS) {
+        const pKey = monthKeyOf(d.paid_at);
+        const dKey = monthKeyOf(d.due_date);
+        if (pKey !== selectedMonth && dKey !== selectedMonth) return false;
+      }
       if (isPersonalMode) {
-        return d.expense_type === 'personal';
+        return d.expense_type === 'personal' || d.organization_id === 'org-personal';
       } else {
         if (d.expense_type === 'personal') return false;
         if (activeOrgId && activeOrgId !== 'all') {
@@ -79,7 +83,7 @@ export default function ReceiptsListPage() {
     .reduce((acc, d) => acc + (d.paid_amount || d.installment_amount || d.amount), 0);
 
   const paidDebtsPersonal = scopedPaidDebts
-    .filter((d) => d.expense_type === 'personal')
+    .filter((d) => d.expense_type === 'personal' || d.organization_id === 'org-personal')
     .reduce((acc, d) => acc + (d.paid_amount || d.installment_amount || d.amount), 0);
 
   const totalPaidDebts = isPersonalMode ? paidDebtsPersonal : paidDebtsBusiness;
@@ -89,7 +93,7 @@ export default function ReceiptsListPage() {
     return receipts.filter((r) => {
       if (r.status === 'rejected') return false;
       if (isPersonalMode) {
-        return r.expense_type === 'personal';
+        return r.expense_type === 'personal' || r.organization_id === 'org-personal';
       } else {
         if (r.expense_type === 'personal') return false;
         if (activeOrgId && activeOrgId !== 'all') {
@@ -106,8 +110,18 @@ export default function ReceiptsListPage() {
       const k = monthKeyOf(r.document_date);
       if (k) counts[k] = (counts[k] || 0) + 1;
     });
+    debts.forEach((d) => {
+      if (d.status !== 'paid') return;
+      if (isPersonalMode) {
+        if (d.expense_type !== 'personal' && d.organization_id !== 'org-personal') return;
+      } else {
+        if (d.expense_type === 'personal') return;
+      }
+      const k = monthKeyOf(d.paid_at) || monthKeyOf(d.due_date);
+      if (k) counts[k] = (counts[k] || 0) + 1;
+    });
     return counts;
-  }, [orgReceipts]);
+  }, [orgReceipts, debts, isPersonalMode]);
 
   const filteredReceipts = useMemo(() => {
     return orgReceipts.filter((r) => {
@@ -134,7 +148,100 @@ export default function ReceiptsListPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgReceipts, selectedMonth, searchTerm, filterType, filterStatus]);
 
-  const otherMonthsCount = orgReceipts.length - (selectedMonth === ALL_MONTHS ? 0 : monthCounts[selectedMonth] || 0);
+  const filteredPaidDebts = useMemo(() => {
+    return scopedPaidDebts.filter((d) => {
+      const term = searchTerm.toLowerCase();
+      const matchSearch =
+        !searchTerm ||
+        d.supplier_name.toLowerCase().includes(term) ||
+        (d.supplier_rut && d.supplier_rut.toLowerCase().includes(term)) ||
+        (d.document_number && d.document_number.toLowerCase().includes(term)) ||
+        (d.notes && d.notes.toLowerCase().includes(term));
+
+      const matchType =
+        filterType === 'all' ||
+        (filterType === 'personal' && (d.expense_type === 'personal' || d.organization_id === 'org-personal')) ||
+        (filterType === 'business' && d.expense_type === 'business');
+
+      const matchStatus = filterStatus === 'all' || filterStatus === 'approved';
+
+      return matchSearch && matchType && matchStatus;
+    });
+  }, [scopedPaidDebts, searchTerm, filterType, filterStatus]);
+
+  // Listado unificado para visualización en tabla
+  const allExpenses = useMemo(() => {
+    type UnifiedExpense = {
+      id: string;
+      kind: 'receipt' | 'debt';
+      date: string;
+      time?: string | null;
+      merchant: string;
+      rut?: string | null;
+      summary?: string | null;
+      docNumber: string;
+      expenseType: 'business' | 'personal' | 'mixed';
+      totalAmount: number;
+      businessAmount: number;
+      personalAmount: number;
+      status: string;
+      rawReceipt?: (typeof receipts)[number];
+      rawDebt?: (typeof debts)[number];
+    };
+
+    const list: UnifiedExpense[] = [];
+
+    filteredReceipts.forEach((r) => {
+      list.push({
+        id: r.id,
+        kind: 'receipt',
+        date: r.document_date || '',
+        time: r.document_time,
+        merchant: r.merchant_name,
+        rut: r.merchant_rut,
+        summary: r.purchase_summary,
+        docNumber: r.receipt_number || '-',
+        expenseType: r.expense_type,
+        totalAmount: r.total_amount,
+        businessAmount: r.business_total,
+        personalAmount: r.personal_total,
+        status: r.status,
+        rawReceipt: r,
+      });
+    });
+
+    filteredPaidDebts.forEach((d) => {
+      const amt = d.paid_amount || d.installment_amount || d.amount;
+      const isPersonal = d.expense_type === 'personal' || d.organization_id === 'org-personal';
+      list.push({
+        id: `debt-${d.id}`,
+        kind: 'debt',
+        date: d.paid_at ? d.paid_at.substring(0, 10) : d.due_date,
+        time: d.paid_at && d.paid_at.includes('T') ? d.paid_at.substring(11, 16) : undefined,
+        merchant: d.supplier_name,
+        rut: d.supplier_rut,
+        summary:
+          d.notes ||
+          (d.is_installment_credit
+            ? `Crédito en cuotas (${d.installment_current || 1}/${d.installment_total || 1})`
+            : `Compromiso / Servicio (${d.category.replace(/_/g, ' ')})`),
+        docNumber:
+          d.document_number ||
+          (d.is_installment_credit ? `Cuota ${d.installment_current || 1}/${d.installment_total || 1}` : 'Compromiso'),
+        expenseType: isPersonal ? 'personal' : 'business',
+        totalAmount: amt,
+        businessAmount: isPersonal ? 0 : amt,
+        personalAmount: isPersonal ? amt : 0,
+        status: 'approved',
+        rawDebt: d,
+      });
+    });
+
+    return list.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  }, [filteredReceipts, filteredPaidDebts]);
+
+  const otherMonthsCount =
+    orgReceipts.length - (selectedMonth === ALL_MONTHS ? 0 : monthCounts[selectedMonth] || 0);
 
   // Métricas rápidas del listado filtrado
   const totalAmount = filteredReceipts.reduce((acc, r) => acc + r.total_amount, 0);
@@ -231,7 +338,10 @@ export default function ReceiptsListPage() {
           <p className="text-xs text-muted-foreground">
             {selectedMonth === ALL_MONTHS ? 'Mostrando todo el historial' : `Mostrando ${formatMonthLabel(selectedMonth)}`}
             {' · '}
-            {filteredReceipts.length} {filteredReceipts.length === 1 ? 'boleta' : 'boletas'}
+            {allExpenses.length} {allExpenses.length === 1 ? 'gasto registrado' : 'gastos registrados'}
+            {filteredPaidDebts.length > 0 && (
+              <span className="text-emerald-600 font-medium"> ({filteredReceipts.length} boletas + {filteredPaidDebts.length} cuentas pagadas)</span>
+            )}
             {pendingReviewCount > 0 && (
               <span className="text-amber-600 font-medium"> · {pendingReviewCount} por revisar</span>
             )}
@@ -288,7 +398,7 @@ export default function ReceiptsListPage() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => exportExpensesToExcel(filteredReceipts)}
+                onClick={() => exportExpensesToExcel(filteredReceipts, filteredPaidDebts)}
                 className="gap-1.5 text-xs text-emerald-700 dark:text-emerald-400 border-emerald-300 dark:border-emerald-800 hover:bg-emerald-50 dark:hover:bg-emerald-950"
               >
                 <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" />
@@ -340,131 +450,207 @@ export default function ReceiptsListPage() {
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {filteredReceipts.length === 0 ? (
+                {allExpenses.length === 0 ? (
                   <tr>
                     <td colSpan={9} className="py-12 text-center text-muted-foreground">
                       {selectedMonth !== ALL_MONTHS && otherMonthsCount > 0 ? (
                         <div className="space-y-2">
                           <p>
-                            No hay boletas en {formatMonthLabel(selectedMonth)}. Tienes {otherMonthsCount} en otros meses.
+                            No hay gastos ni boletas en {formatMonthLabel(selectedMonth)}. Tienes {otherMonthsCount} en otros meses.
                           </p>
                           <Button variant="outline" size="sm" className="text-xs" onClick={() => setSelectedMonth(ALL_MONTHS)}>
                             Ver todos los meses
                           </Button>
                         </div>
                       ) : selectedMonth !== ALL_MONTHS ? (
-                        <p>Aún no hay boletas en {formatMonthLabel(selectedMonth)}. Usa el botón Nueva Boleta para subir la primera.</p>
+                        <p>Aún no hay gastos en {formatMonthLabel(selectedMonth)}. Usa el botón + Agregar Gasto o Escanear Boleta.</p>
                       ) : (
-                        'No se encontraron boletas con los filtros seleccionados.'
+                        'No se encontraron gastos con los filtros seleccionados.'
                       )}
                     </td>
                   </tr>
                 ) : (
-                  filteredReceipts.map((r) => {
+                  allExpenses.map((item) => {
+                    if (item.kind === 'receipt' && item.rawReceipt) {
+                      const r = item.rawReceipt;
+                      return (
+                        <tr key={r.id} className="hover:bg-muted/30 transition-colors">
+                          <td className="px-4 py-3 font-medium whitespace-nowrap">
+                            {formatDateCL(r.document_date)}
+                            {r.document_time && (
+                              <span className="text-[10px] text-muted-foreground block">{r.document_time}</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 font-semibold text-foreground">
+                            {r.merchant_name}
+                            {r.purchase_summary && (
+                              <span className="text-[11px] text-blue-600 dark:text-blue-400 font-normal block truncate max-w-xs">
+                                {r.purchase_summary}
+                              </span>
+                            )}
+                            {r.merchant_rut && (
+                              <span className="text-[10px] text-muted-foreground block font-mono">
+                                RUT: {r.merchant_rut}
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 font-mono text-[11px]">
+                            {r.receipt_number || '-'}
+                          </td>
+                          <td className="px-4 py-3">
+                            <Badge
+                              variant={
+                                r.expense_type === 'business'
+                                  ? 'info'
+                                  : r.expense_type === 'personal'
+                                  ? 'success'
+                                  : 'purple'
+                              }
+                              className="text-[10px]"
+                            >
+                              {r.expense_type === 'business'
+                                ? 'Empresa'
+                                : r.expense_type === 'personal'
+                                ? 'Personal'
+                                : 'Mixto'}
+                            </Badge>
+                          </td>
+                          <td className="px-4 py-3 text-right font-bold text-foreground">
+                            {formatCLP(r.total_amount)}
+                          </td>
+                          <td className="px-4 py-3 text-right font-medium text-blue-600">
+                            {formatCLP(r.business_total)}
+                          </td>
+                          <td className="px-4 py-3 text-right font-medium text-emerald-600">
+                            {formatCLP(r.personal_total)}
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <Badge
+                              variant={
+                                r.status === 'approved'
+                                  ? 'success'
+                                  : r.status === 'needs_review'
+                                  ? 'warning'
+                                  : r.status === 'rejected'
+                                  ? 'destructive'
+                                  : 'secondary'
+                              }
+                              className="text-[10px]"
+                            >
+                              {r.status === 'approved'
+                                ? 'Aprobado'
+                                : r.status === 'needs_review'
+                                ? 'Por Revisar'
+                                : r.status === 'rejected'
+                                ? 'Rechazado'
+                                : r.status}
+                            </Badge>
+                          </td>
+                          <td className="px-4 py-3 text-right whitespace-nowrap">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <Link href={`/receipts/${r.id}`}>
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-blue-600 hover:bg-blue-50" title="Revisar">
+                                  <Eye className="h-3.5 w-3.5" />
+                                </Button>
+                              </Link>
+                              {r.status === 'needs_review' && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7 text-emerald-600 hover:bg-emerald-50"
+                                  onClick={() => approveReceipt(r.id)}
+                                  title="Aprobar rápidamente"
+                                >
+                                  <CheckCircle2 className="h-3.5 w-3.5" />
+                                </Button>
+                              )}
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-red-500 hover:bg-red-50"
+                                onClick={() => {
+                                  if (confirm(`¿Eliminar la boleta de ${r.merchant_name}?`)) {
+                                    deleteReceipt(r.id);
+                                  }
+                                }}
+                                title="Eliminar"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    }
+
+                    // Fila de Cuenta por Pagar Pagada (Compromiso o servicio liquidado)
                     return (
-                      <tr key={r.id} className="hover:bg-muted/30 transition-colors">
+                      <tr key={item.id} className="hover:bg-muted/30 transition-colors bg-emerald-500/5">
                         <td className="px-4 py-3 font-medium whitespace-nowrap">
-                          {formatDateCL(r.document_date)}
-                          {r.document_time && (
-                            <span className="text-[10px] text-muted-foreground block">{r.document_time}</span>
+                          {formatDateCL(item.date)}
+                          {item.time && (
+                            <span className="text-[10px] text-muted-foreground block">{item.time}</span>
                           )}
                         </td>
                         <td className="px-4 py-3 font-semibold text-foreground">
-                          {r.merchant_name}
-                          {r.purchase_summary && (
-                            <span className="text-[11px] text-blue-600 dark:text-blue-400 font-normal block truncate max-w-xs">
-                              {r.purchase_summary}
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span>{item.merchant}</span>
+                            <Badge
+                              variant="outline"
+                              className="text-[9px] py-0 px-1.5 border-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 font-semibold"
+                            >
+                              Cuenta Pagada
+                            </Badge>
+                          </div>
+                          {item.summary && (
+                            <span className="text-[11px] text-emerald-700 dark:text-emerald-300/80 font-normal block truncate max-w-xs">
+                              {item.summary}
                             </span>
                           )}
-                          {r.merchant_rut && (
+                          {item.rut && (
                             <span className="text-[10px] text-muted-foreground block font-mono">
-                              RUT: {r.merchant_rut}
+                              RUT: {item.rut}
                             </span>
                           )}
                         </td>
                         <td className="px-4 py-3 font-mono text-[11px]">
-                          {r.receipt_number || '-'}
+                          {item.docNumber}
                         </td>
                         <td className="px-4 py-3">
                           <Badge
-                            variant={
-                              r.expense_type === 'business'
-                                ? 'info'
-                                : r.expense_type === 'personal'
-                                ? 'success'
-                                : 'purple'
-                            }
+                            variant={item.expenseType === 'personal' ? 'success' : 'info'}
                             className="text-[10px]"
                           >
-                            {r.expense_type === 'business'
-                              ? 'Empresa'
-                              : r.expense_type === 'personal'
-                              ? 'Personal'
-                              : 'Mixto'}
+                            {item.expenseType === 'personal' ? 'Personal' : 'Empresa'}
                           </Badge>
                         </td>
                         <td className="px-4 py-3 text-right font-bold text-foreground">
-                          {formatCLP(r.total_amount)}
+                          {formatCLP(item.totalAmount)}
                         </td>
                         <td className="px-4 py-3 text-right font-medium text-blue-600">
-                          {formatCLP(r.business_total)}
+                          {formatCLP(item.businessAmount)}
                         </td>
                         <td className="px-4 py-3 text-right font-medium text-emerald-600">
-                          {formatCLP(r.personal_total)}
+                          {formatCLP(item.personalAmount)}
                         </td>
                         <td className="px-4 py-3 text-center">
-                          <Badge
-                            variant={
-                              r.status === 'approved'
-                                ? 'success'
-                                : r.status === 'needs_review'
-                                ? 'warning'
-                                : r.status === 'rejected'
-                                ? 'destructive'
-                                : 'secondary'
-                            }
-                            className="text-[10px]"
-                          >
-                            {r.status === 'approved'
-                              ? 'Aprobado'
-                              : r.status === 'needs_review'
-                              ? 'Por Revisar'
-                              : r.status === 'rejected'
-                              ? 'Rechazado'
-                              : r.status}
+                          <Badge variant="success" className="text-[10px]">
+                            Pagada
                           </Badge>
                         </td>
                         <td className="px-4 py-3 text-right whitespace-nowrap">
                           <div className="flex items-center justify-end gap-1.5">
-                            <Link href={`/receipts/${r.id}`}>
-                              <Button variant="ghost" size="icon" className="h-7 w-7 text-blue-600 hover:bg-blue-50" title="Revisar">
-                                <Eye className="h-3.5 w-3.5" />
-                              </Button>
-                            </Link>
-                            {r.status === 'needs_review' && (
+                            <Link href="/cuentas-por-pagar">
                               <Button
                                 variant="ghost"
-                                size="icon"
-                                className="h-7 w-7 text-emerald-600 hover:bg-emerald-50"
-                                onClick={() => approveReceipt(r.id)}
-                                title="Aprobar rápidamente"
+                                size="sm"
+                                className="h-7 text-[10px] text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/50 gap-1 px-2"
+                                title="Ver en Cuentas por Pagar"
                               >
-                                <CheckCircle2 className="h-3.5 w-3.5" />
+                                <Eye className="h-3 w-3" />
+                                <span>Ver Cuenta</span>
                               </Button>
-                            )}
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7 text-red-500 hover:bg-red-50"
-                              onClick={() => {
-                                if (confirm(`¿Eliminar la boleta de ${r.merchant_name}?`)) {
-                                  deleteReceipt(r.id);
-                                }
-                              }}
-                              title="Eliminar"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
+                            </Link>
                           </div>
                         </td>
                       </tr>

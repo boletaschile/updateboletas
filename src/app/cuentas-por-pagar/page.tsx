@@ -237,7 +237,7 @@ export default function CuentasPorPagarPage() {
   const orgDebts = useMemo(() => {
     return debts.filter((d) => {
       if (isPersonalMode) {
-        return d.expense_type === 'personal';
+        return d.expense_type === 'personal' || d.organization_id === 'org-personal';
       } else {
         if (d.expense_type === 'personal') return false;
         if (activeOrgId && activeOrgId !== 'all') {
@@ -591,11 +591,18 @@ export default function CuentasPorPagarPage() {
                         <td className="px-3 py-3 text-center whitespace-nowrap">
                           <button
                             type="button"
-                            onClick={() =>
+                            onClick={() => {
+                              const nextType = debt.expense_type === 'business' ? 'personal' : 'business';
                               updateDebt(debt.id, {
-                                expense_type: debt.expense_type === 'business' ? 'personal' : 'business',
-                              })
-                            }
+                                expense_type: nextType,
+                                organization_id:
+                                  nextType === 'personal'
+                                    ? 'org-personal'
+                                    : activeOrgId !== 'all'
+                                    ? activeOrgId
+                                    : 'org-empresa-1',
+                              });
+                            }}
                             className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border transition-all cursor-pointer font-medium hover:scale-105 active:scale-95 ${
                               debt.expense_type === 'business'
                                 ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800'
@@ -666,7 +673,17 @@ export default function CuentasPorPagarPage() {
                             {debt.status !== 'paid' ? (
                               <Button
                                 size="sm"
-                                onClick={() => markDebtAsPaid(debt.id)}
+                                onClick={() => {
+                                  markDebtAsPaid(debt.id);
+                                  if (!debt.organization_id || !debt.expense_type) {
+                                    updateDebt(debt.id, {
+                                      expense_type: debt.expense_type || (isPersonalMode ? 'personal' : 'business'),
+                                      organization_id:
+                                        debt.organization_id ||
+                                        (isPersonalMode ? 'org-personal' : activeOrgId !== 'all' ? activeOrgId : 'org-empresa-1'),
+                                    });
+                                  }
+                                }}
                                 className="h-7 text-[10px] px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white gap-1"
                               >
                                 <Check className="h-3 w-3" />

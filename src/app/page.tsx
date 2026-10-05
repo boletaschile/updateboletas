@@ -129,20 +129,6 @@ export default function DashboardPage() {
     });
   }, [receipts, activeOrgId, isPersonalMode]);
 
-  const monthCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    orgReceipts.forEach((r) => {
-      const k = monthKeyOf(r.document_date);
-      if (k) counts[k] = (counts[k] || 0) + 1;
-    });
-    return counts;
-  }, [orgReceipts]);
-
-  // Boletas del mes seleccionado
-  const currentMonthReceipts = useMemo(() => {
-    return orgReceipts.filter((r) => inSelectedMonth(r.document_date));
-  }, [orgReceipts, selectedMonth]);
-
   // Compromisos y Cuentas por pagar con aislamiento estricto
   const scopedDebts = useMemo(() => {
     return debts.filter((d) => {
@@ -157,9 +143,35 @@ export default function DashboardPage() {
     });
   }, [debts, activeOrgId, isPersonalMode]);
 
-  // Compromisos y deudas marcadas como pagadas en el mes
+  const monthCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    orgReceipts.forEach((r) => {
+      const k = monthKeyOf(r.document_date);
+      if (k) counts[k] = (counts[k] || 0) + 1;
+    });
+    scopedDebts.forEach((d) => {
+      if (d.status === 'paid') {
+        const k = monthKeyOf(d.paid_at) || monthKeyOf(d.due_date);
+        if (k) counts[k] = (counts[k] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [orgReceipts, scopedDebts]);
+
+  // Boletas del mes seleccionado
+  const currentMonthReceipts = useMemo(() => {
+    return orgReceipts.filter((r) => inSelectedMonth(r.document_date));
+  }, [orgReceipts, selectedMonth]);
+
+  // Compromisos y deudas marcadas como pagadas en el mes (coincide si vence o se pagó en el período)
   const paidDebts = useMemo(() => {
-    return scopedDebts.filter((d) => d.status === 'paid' && inSelectedMonth(d.paid_at || d.due_date));
+    return scopedDebts.filter((d) => {
+      if (d.status !== 'paid') return false;
+      if (selectedMonth === ALL_MONTHS) return true;
+      const pKey = monthKeyOf(d.paid_at);
+      const dKey = monthKeyOf(d.due_date);
+      return pKey === selectedMonth || dKey === selectedMonth;
+    });
   }, [scopedDebts, selectedMonth]);
 
   const paidDebtsAmount = useMemo(() => {
@@ -364,8 +376,9 @@ export default function DashboardPage() {
 
       const mPaidDebts = scopedDebts.filter((d) => {
         if (d.status !== 'paid') return false;
-        const pDate = d.paid_at ? d.paid_at.substring(0, 7) : d.due_date.substring(0, 7);
-        return pDate === monthPrefix;
+        const pKey = monthKeyOf(d.paid_at);
+        const dKey = monthKeyOf(d.due_date);
+        return pKey === monthPrefix || dKey === monthPrefix;
       });
 
       const recTotal = mReceipts.reduce((acc, r) => {

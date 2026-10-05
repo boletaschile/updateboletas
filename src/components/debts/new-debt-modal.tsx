@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { useReceipts } from '@/lib/store/receipts-context';
+import { useAuth } from '@/lib/store/auth-context';
 import { validateRUT, formatRUT, parseCLP, formatCLP } from '@/lib/utils';
 import { DebtCategory } from '@/types';
 import { Calendar, Plus, Clock, AlertTriangle, Building2, User, CreditCard } from 'lucide-react';
@@ -25,6 +26,8 @@ interface NewDebtModalProps {
 
 export function NewDebtModal({ isOpen, onClose }: NewDebtModalProps) {
   const { addDebt } = useReceipts();
+  const { activeOrgId, activeOrg } = useAuth();
+  const isPersonalMode = activeOrg?.type === 'personal' || activeOrgId === 'org-personal';
 
   const [supplierName, setSupplierName] = useState('');
   const [supplierRut, setSupplierRut] = useState('');
@@ -35,6 +38,12 @@ export function NewDebtModal({ isOpen, onClose }: NewDebtModalProps) {
   const [dueDate, setDueDate] = useState<string>('');
   const [reminderDays, setReminderDays] = useState<number>(3);
   const [expenseType, setExpenseType] = useState<'business' | 'personal'>('business');
+
+  React.useEffect(() => {
+    if (isOpen) {
+      setExpenseType(isPersonalMode ? 'personal' : 'business');
+    }
+  }, [isOpen, isPersonalMode]);
   const [isRecurring, setIsRecurring] = useState(false);
   const [isInstallment, setIsInstallment] = useState(false);
   const [installmentCurrent, setInstallmentCurrent] = useState<number>(1);
@@ -74,8 +83,16 @@ export function NewDebtModal({ isOpen, onClose }: NewDebtModalProps) {
       ? (documentNumber.trim() || `CTA-${installmentCurrent}/${installmentTotal}`)
       : (documentNumber.trim() || null);
 
+    const finalOrgId =
+      expenseType === 'personal'
+        ? 'org-personal'
+        : activeOrgId !== 'all'
+        ? activeOrgId
+        : 'org-empresa-1';
+
     addDebt({
       user_id: 'user-demo-1',
+      organization_id: finalOrgId,
       supplier_name: supplierName.trim(),
       supplier_rut: supplierRut ? formatRUT(supplierRut) : null,
       document_number: docNum,

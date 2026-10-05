@@ -532,10 +532,12 @@ export function ReceiptsProvider({ children }: { children: React.ReactNode }) {
 
   const markDebtAsPaid = (id: string, paymentMethod?: string) => {
     const paidAt = new Date().toISOString();
+    let calculatedAmount: number | undefined;
     setDebts((prev) =>
       prev.map((d) => {
         if (d.id !== id) return d;
         const paidAmount = d.is_installment_credit ? (d.installment_amount || d.amount) : d.amount;
+        calculatedAmount = paidAmount;
         return {
           ...d,
           status: 'paid',
@@ -549,6 +551,7 @@ export function ReceiptsProvider({ children }: { children: React.ReactNode }) {
     dbUpdateDebt(id, {
       status: 'paid',
       paid_at: paidAt,
+      paid_amount: calculatedAmount,
       payment_method: paymentMethod || 'Transferencia Bancaria',
       updated_at: paidAt,
     });
