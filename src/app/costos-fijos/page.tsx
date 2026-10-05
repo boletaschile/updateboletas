@@ -39,7 +39,7 @@ import {
 
 export default function CostosFijosPage() {
   const { organizations, activeOrgId, activeOrg, updateOrganization, setActiveOrgId } = useAuth();
-  const { addDebt, debts } = useReceipts();
+  const { addDebt, updateDebt, deleteDebt, debts } = useReceipts();
 
   // Filtrar organizaciones tipo empresa
   const businessOrgs = useMemo(
@@ -127,13 +127,221 @@ export default function CostosFijosPage() {
   const grandTotalFixedCosts = totalPayroll + totalOperationalFixed;
   const dailyBreakEven = Math.round(grandTotalFixedCosts / 30);
 
-  // Guardar Cambios
+  // Sincronización inteligente (UPSERT): Crea nuevos compromisos y actualiza existentes en Cuentas por Pagar
+  const syncDebtsForMonth = (silent = false) => {
+    if (!currentBusinessOrg) return { countCreated: 0, countUpdated: 0 };
+
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = String(now.getMonth() + 1).padStart(2, '0');
+    const monthPrefix = `${currentYear}-${currentMonth}`;
+    const endOfMonth = new Date(currentYear, now.getMonth() + 1, 0).toISOString().split('T')[0];
+
+    let countCreated = 0;
+    let countUpdated = 0;
+
+    const syncItem = (
+      matchingKeywords: string[],
+      targetAmount: number,
+      createData: {
+        supplier_name: string;
+        document_number: string;
+        document_type: 'servicio' | 'otro';
+        category: 'sueldo_empresarial' | 'arriendo' | 'servicios_basicos' | 'otro';
+        issue_date: string;
+        due_date: string;
+        reminder_days_before: number;
+        expense_type: 'business';
+        notes: string;
+      }
+    ) => {
+      const existing = debts.find((d) => {
+        if (d.organization_id !== currentBusinessOrg.id) return false;
+        const matchesDate = (d.due_date && d.due_date.startsWith(monthPrefix)) || (d.issue_date && d.issue_date.startsWith(monthPrefix));
+        if (!matchesDate) return false;
+        const nameLower = d.supplier_name.toLowerCase();
+        return matchingKeywords.some((k) => nameLower.includes(k.toLowerCase()));
+      });
+
+      if (existing) {
+        if (targetAmount > 0) {
+          if (existing.amount !== targetAmount) {
+            updateDebt(existing.id, {
+              amount: targetAmount,
+              due_date: createData.due_date,
+              notes: createData.notes,
+            });
+            countUpdated++;
+          }
+        } else {
+          // Si el gasto se puso en 0 y aún no está pagado, se retira de cuentas por pagar
+          if (existing.status !== 'paid') {
+            deleteDebt(existing.id);
+          }
+        }
+      } else if (targetAmount > 0) {
+        addDebt({
+          user_id: currentBusinessOrg.created_by || 'system',
+          organization_id: currentBusinessOrg.id,
+          ...createData,
+          amount: targetAmount,
+        });
+        countCreated++;
+      }
+    };
+
+    // 1. Sueldo Asignado Dueño
+    syncItem(
+      ['Sueldo Asignado', 'Sueldo Patronal'],
+      assignedSalary,
+      {
+        supplier_name: `Sueldo Asignado Dueño (${currentBusinessOrg.name})`,
+        document_number: `SUELDO-${monthPrefix}`,
+        document_type: 'otro',
+        category: 'sueldo_empresarial',
+        issue_date: `${monthPrefix}-01`,
+        due_date: endOfMonth,
+        reminder_days_before: 5,
+        expense_type: 'business',
+        notes: 'Remuneración patronal fija mensual acordada para el socio/dueño.',
+      }
+    );
+
+    // 2. Colaboradores del Equipo
+    teamSalaries
+      .filter((emp) => emp.name.trim() && emp.amount > 0)
+      .forEach((emp) => {
+        const empDueDate = `${monthPrefix}-${String(emp.payment_day || 30).padStart(2, '0')}`;
+        syncItem(
+          [`Sueldo: ${emp.name}`, emp.name],
+          emp.amount,
+          {
+            supplier_name: `Sueldo: ${emp.name} (${emp.role || 'Colaborador'})`,
+            document_number: `NOM-${monthPrefix}-${emp.name.replace(/\s+/g, '').substring(0, 5).toUpperCase()}`,
+            document_type: 'otro',
+            category: 'sueldo_empresarial',
+            issue_date: `${monthPrefix}-01`,
+            due_date: empDueDate > endOfMonth ? endOfMonth : empDueDate,
+            reminder_days_before: 3,
+            expense_type: 'business',
+            notes: `Remuneración mensual pactada para ${emp.name}.`,
+          }
+        );
+      });
+
+    // 3. Arriendo
+    syncItem(
+      ['Arriendo'],
+      rent,
+      {
+        supplier_name: `Arriendo Oficina / Local (${currentBusinessOrg.name})`,
+        document_number: `ARR-${monthPrefix}`,
+        document_type: 'servicio',
+        category: 'arriendo',
+        issue_date: `${monthPrefix}-01`,
+        due_date: `${monthPrefix}-05`,
+        reminder_days_before: 3,
+        expense_type: 'business',
+        notes: 'Gasto fijo mensual de arriendo de oficinas o dependencias.',
+      }
+    );
+
+    // 4. Telefonía Móvil / Mobile
+    syncItem(
+      ['Telefonía Móvil', 'Mobile', 'Celular'],
+      mobile,
+      {
+        supplier_name: `Telefonía Móvil / Mobile (${currentBusinessOrg.name})`,
+        document_number: `MOB-${monthPrefix}`,
+        document_type: 'servicio',
+        category: 'servicios_basicos',
+        issue_date: `${monthPrefix}-01`,
+        due_date: `${monthPrefix}-16`,
+        reminder_days_before: 3,
+        expense_type: 'business',
+        notes: 'Plan celular y telefonía móvil de la empresa.',
+      }
+    );
+
+    // 5. Internet
+    syncItem(
+      ['Internet', 'Telecomunicaciones'],
+      internet,
+      {
+        supplier_name: `Internet & Telecomunicaciones (${currentBusinessOrg.name})`,
+        document_number: `INT-${monthPrefix}`,
+        document_type: 'servicio',
+        category: 'servicios_basicos',
+        issue_date: `${monthPrefix}-01`,
+        due_date: `${monthPrefix}-15`,
+        reminder_days_before: 3,
+        expense_type: 'business',
+        notes: 'Servicio mensual de internet y conectividad fibra.',
+      }
+    );
+
+    // 6. Luz
+    syncItem(
+      ['Luz', 'Electricidad'],
+      electricity,
+      {
+        supplier_name: `Luz / Electricidad (${currentBusinessOrg.name})`,
+        document_number: `LUZ-${monthPrefix}`,
+        document_type: 'servicio',
+        category: 'servicios_basicos',
+        issue_date: `${monthPrefix}-01`,
+        due_date: `${monthPrefix}-18`,
+        reminder_days_before: 3,
+        expense_type: 'business',
+        notes: 'Suministro eléctrico del mes.',
+      }
+    );
+
+    // 7. Agua
+    syncItem(
+      ['Agua Potable', 'Agua'],
+      water,
+      {
+        supplier_name: `Agua Potable (${currentBusinessOrg.name})`,
+        document_number: `AGUA-${monthPrefix}`,
+        document_type: 'servicio',
+        category: 'servicios_basicos',
+        issue_date: `${monthPrefix}-01`,
+        due_date: `${monthPrefix}-20`,
+        reminder_days_before: 3,
+        expense_type: 'business',
+        notes: 'Consumo de agua potable.',
+      }
+    );
+
+    // 8. Otros fijos
+    syncItem(
+      ['Otros Gastos Fijos', 'Otros Fijos', 'FIJ-'],
+      otherFixed,
+      {
+        supplier_name: `Otros Gastos Fijos / Software (${currentBusinessOrg.name})`,
+        document_number: `FIJ-${monthPrefix}`,
+        document_type: 'otro',
+        category: 'otro',
+        issue_date: `${monthPrefix}-01`,
+        due_date: endOfMonth,
+        reminder_days_before: 3,
+        expense_type: 'business',
+        notes: 'Otros costos fijos mensuales (software SaaS, contabilidad externa, etc.).',
+      }
+    );
+
+    return { countCreated, countUpdated };
+  };
+
+  // Guardar Cambios y sincronizar automáticamente con Cuentas por Pagar
   const handleSave = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!currentBusinessOrg) return;
 
     const validTeam = teamSalaries.filter((emp) => emp.name.trim() && emp.amount > 0);
 
+    // 1. Guardar en AuthContext (Entidad Empresa)
     updateOrganization(currentBusinessOrg.id, {
       name: currentBusinessOrg.name,
       legal_name: currentBusinessOrg.legal_name,
@@ -152,198 +360,25 @@ export default function CostosFijosPage() {
       },
     });
 
+    // 2. Sincronizar automáticamente en Cuentas por Pagar (debts) para reflejar los nuevos montos
+    const { countCreated, countUpdated } = syncDebtsForMonth();
+
+    let msg = '¡Configuración de costos fijos guardada!';
+    if (countUpdated > 0 || countCreated > 0) {
+      msg = `¡Guardado exitoso! Se sincronizaron Cuentas por Pagar (${countUpdated > 0 ? `${countUpdated} actualizado(s)` : ''}${countUpdated > 0 && countCreated > 0 ? ', ' : ''}${countCreated > 0 ? `${countCreated} nuevo(s)` : ''}).`;
+    }
+
+    setSyncMessage(msg);
     setIsSaved(true);
-    setTimeout(() => setIsSaved(false), 3500);
+    setTimeout(() => {
+      setIsSaved(false);
+      setSyncMessage(null);
+    }, 4500);
   };
 
-  // Sincronizar automáticamente con Cuentas por Pagar del mes actual
+  // Botón directo para forzar sincronización
   const handleSyncToCurrentMonthDebts = () => {
-    if (!currentBusinessOrg) return;
-
     handleSave();
-
-    const now = new Date();
-    const currentYear = now.getFullYear();
-    const currentMonth = String(now.getMonth() + 1).padStart(2, '0');
-    const monthPrefix = `${currentYear}-${currentMonth}`;
-    const endOfMonth = new Date(currentYear, now.getMonth() + 1, 0).toISOString().split('T')[0];
-
-    const alreadyExists = (snippet: string) => {
-      return debts.some(
-        (d) =>
-          d.organization_id === currentBusinessOrg.id &&
-          d.supplier_name.toLowerCase().includes(snippet.toLowerCase()) &&
-          (d.due_date.startsWith(monthPrefix) || d.issue_date.startsWith(monthPrefix))
-      );
-    };
-
-    let count = 0;
-
-    // 1. Sueldo Asignado Dueño
-    if (assignedSalary > 0 && !alreadyExists('Sueldo Asignado')) {
-      addDebt({
-        user_id: currentBusinessOrg.created_by || 'system',
-        organization_id: currentBusinessOrg.id,
-        supplier_name: `Sueldo Asignado Dueño (${currentBusinessOrg.name})`,
-        document_number: `SUELDO-${monthPrefix}`,
-        document_type: 'otro',
-        category: 'sueldo_empresarial',
-        amount: assignedSalary,
-        issue_date: `${monthPrefix}-01`,
-        due_date: endOfMonth,
-        reminder_days_before: 5,
-        expense_type: 'business',
-        notes: 'Remuneración patronal fija mensual acordada para el socio/dueño.',
-      });
-      count++;
-    }
-
-    // 2. Colaboradores del Equipo
-    teamSalaries
-      .filter((emp) => emp.name.trim() && emp.amount > 0)
-      .forEach((emp) => {
-        const empSnippet = `Sueldo: ${emp.name}`;
-        if (!alreadyExists(empSnippet)) {
-          const empDueDate = `${monthPrefix}-${String(emp.payment_day || 30).padStart(2, '0')}`;
-          addDebt({
-            user_id: currentBusinessOrg.created_by || 'system',
-            organization_id: currentBusinessOrg.id,
-            supplier_name: `Sueldo: ${emp.name} (${emp.role || 'Colaborador'})`,
-            document_number: `NOM-${monthPrefix}-${emp.name.replace(/\s+/g, '').substring(0, 5).toUpperCase()}`,
-            document_type: 'otro',
-            category: 'sueldo_empresarial',
-            amount: emp.amount,
-            issue_date: `${monthPrefix}-01`,
-            due_date: empDueDate > endOfMonth ? endOfMonth : empDueDate,
-            reminder_days_before: 3,
-            expense_type: 'business',
-            notes: `Remuneración mensual pactada para ${emp.name}.`,
-          });
-          count++;
-        }
-      });
-
-    // 3. Arriendo
-    if (rent > 0 && !alreadyExists('Arriendo')) {
-      addDebt({
-        user_id: currentBusinessOrg.created_by || 'system',
-        organization_id: currentBusinessOrg.id,
-        supplier_name: `Arriendo Oficina / Local (${currentBusinessOrg.name})`,
-        document_number: `ARR-${monthPrefix}`,
-        document_type: 'servicio',
-        category: 'arriendo',
-        amount: rent,
-        issue_date: `${monthPrefix}-01`,
-        due_date: `${monthPrefix}-05`,
-        reminder_days_before: 3,
-        expense_type: 'business',
-        notes: 'Gasto fijo mensual de arriendo de oficinas o dependencias.',
-      });
-      count++;
-    }
-
-    // 4. Internet
-    if (internet > 0 && !alreadyExists('Internet')) {
-      addDebt({
-        user_id: currentBusinessOrg.created_by || 'system',
-        organization_id: currentBusinessOrg.id,
-        supplier_name: `Internet & Telecomunicaciones (${currentBusinessOrg.name})`,
-        document_number: `INT-${monthPrefix}`,
-        document_type: 'servicio',
-        category: 'servicios_basicos',
-        amount: internet,
-        issue_date: `${monthPrefix}-01`,
-        due_date: `${monthPrefix}-15`,
-        reminder_days_before: 3,
-        expense_type: 'business',
-        notes: 'Servicio mensual de internet y conectividad fibra.',
-      });
-      count++;
-    }
-
-    // 5. Telefonía Móvil / Mobile
-    if (mobile > 0 && !alreadyExists('Mobile') && !alreadyExists('Celular') && !alreadyExists('Móvil')) {
-      addDebt({
-        user_id: currentBusinessOrg.created_by || 'system',
-        organization_id: currentBusinessOrg.id,
-        supplier_name: `Telefonía Móvil / Mobile (${currentBusinessOrg.name})`,
-        document_number: `MOB-${monthPrefix}`,
-        document_type: 'servicio',
-        category: 'servicios_basicos',
-        amount: mobile,
-        issue_date: `${monthPrefix}-01`,
-        due_date: `${monthPrefix}-16`,
-        reminder_days_before: 3,
-        expense_type: 'business',
-        notes: 'Plan celular y telefonía móvil de la empresa.',
-      });
-      count++;
-    }
-
-    // 6. Luz
-    if (electricity > 0 && !alreadyExists('Luz')) {
-      addDebt({
-        user_id: currentBusinessOrg.created_by || 'system',
-        organization_id: currentBusinessOrg.id,
-        supplier_name: `Luz / Electricidad (${currentBusinessOrg.name})`,
-        document_number: `LUZ-${monthPrefix}`,
-        document_type: 'servicio',
-        category: 'servicios_basicos',
-        amount: electricity,
-        issue_date: `${monthPrefix}-01`,
-        due_date: `${monthPrefix}-18`,
-        reminder_days_before: 3,
-        expense_type: 'business',
-        notes: 'Suministro eléctrico del mes.',
-      });
-      count++;
-    }
-
-    // 7. Agua
-    if (water > 0 && !alreadyExists('Agua')) {
-      addDebt({
-        user_id: currentBusinessOrg.created_by || 'system',
-        organization_id: currentBusinessOrg.id,
-        supplier_name: `Agua Potable (${currentBusinessOrg.name})`,
-        document_number: `AGUA-${monthPrefix}`,
-        document_type: 'servicio',
-        category: 'servicios_basicos',
-        amount: water,
-        issue_date: `${monthPrefix}-01`,
-        due_date: `${monthPrefix}-20`,
-        reminder_days_before: 3,
-        expense_type: 'business',
-        notes: 'Consumo de agua potable.',
-      });
-      count++;
-    }
-
-    // 8. Otros fijos
-    if (otherFixed > 0 && !alreadyExists('Otros Fijos')) {
-      addDebt({
-        user_id: currentBusinessOrg.created_by || 'system',
-        organization_id: currentBusinessOrg.id,
-        supplier_name: `Otros Gastos Fijos / Software (${currentBusinessOrg.name})`,
-        document_number: `FIJ-${monthPrefix}`,
-        document_type: 'otro',
-        category: 'otro',
-        amount: otherFixed,
-        issue_date: `${monthPrefix}-01`,
-        due_date: endOfMonth,
-        reminder_days_before: 3,
-        expense_type: 'business',
-        notes: 'Otros costos fijos mensuales (software SaaS, contabilidad externa, etc.).',
-      });
-      count++;
-    }
-
-    if (count > 0) {
-      setSyncMessage(`¡Se cargaron ${count} compromiso(s) en Cuentas por Pagar y Flujo de Caja para este mes!`);
-    } else {
-      setSyncMessage('Todos los compromisos ya se encontraban creados para este período.');
-    }
-
-    setTimeout(() => setSyncMessage(null), 4000);
   };
 
   return (
