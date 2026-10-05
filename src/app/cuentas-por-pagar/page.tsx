@@ -28,16 +28,173 @@ import {
   Layers,
   Bell,
   Check,
+  Briefcase,
+  Sparkles,
 } from 'lucide-react';
 
 export default function CuentasPorPagarPage() {
-  const { debts, markDebtAsPaid, unmarkDebtAsPaid, updateDebt, deleteDebt } = useReceipts();
+  const { debts, addDebt, markDebtAsPaid, unmarkDebtAsPaid, updateDebt, deleteDebt } = useReceipts();
   const { activeOrg, activeOrgId } = useAuth();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterType, setFilterType] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
+  const [loadFixedMessage, setLoadFixedMessage] = useState<string | null>(null);
+
+  const handleLoadFixedExpenses = () => {
+    if (!activeOrg || activeOrg.type !== 'business') {
+      setLoadFixedMessage('Selecciona un perfil de empresa activo para cargar sus gastos fijos.');
+      setTimeout(() => setLoadFixedMessage(null), 3500);
+      return;
+    }
+
+    const exp = activeOrg.monthly_expenses || {};
+    const salary = activeOrg.assigned_salary || exp.assigned_salary || 0;
+    const rent = exp.rent || 0;
+    const internet = exp.internet || 0;
+    const electricity = exp.electricity || 0;
+    const water = exp.water || 0;
+    const otherFixed = exp.other_fixed || 0;
+
+    if (!salary && !rent && !internet && !electricity && !water && !otherFixed) {
+      setLoadFixedMessage('Esta empresa aún no tiene sueldo asignado ni gastos fijos configurados en Empresas y Perfiles.');
+      setTimeout(() => setLoadFixedMessage(null), 4000);
+      return;
+    }
+
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = String(now.getMonth() + 1).padStart(2, '0');
+    const monthPrefix = `${currentYear}-${currentMonth}`;
+    const endOfMonth = new Date(currentYear, now.getMonth() + 1, 0).toISOString().split('T')[0];
+    const midOfMonth = `${monthPrefix}-15`;
+
+    let count = 0;
+
+    const alreadyExists = (snippet: string) => {
+      return orgDebts.some(
+        (d) =>
+          d.supplier_name.toLowerCase().includes(snippet.toLowerCase()) &&
+          (d.due_date.startsWith(monthPrefix) || d.issue_date.startsWith(monthPrefix))
+      );
+    };
+
+    if (salary > 0 && !alreadyExists('Sueldo Asignado')) {
+      addDebt({
+        user_id: activeOrg.created_by || 'system',
+        organization_id: activeOrg.id,
+        supplier_name: `Sueldo Asignado Dueño (${activeOrg.name})`,
+        document_number: `SUELDO-${monthPrefix}`,
+        document_type: 'otro',
+        category: 'sueldo_empresarial',
+        amount: salary,
+        issue_date: `${monthPrefix}-01`,
+        due_date: endOfMonth,
+        reminder_days_before: 5,
+        expense_type: 'business',
+        notes: 'Remuneración o asignación patronal fija mensual pactada para el dueño o socio.',
+      });
+      count++;
+    }
+
+    if (rent > 0 && !alreadyExists('Arriendo')) {
+      addDebt({
+        user_id: activeOrg.created_by || 'system',
+        organization_id: activeOrg.id,
+        supplier_name: `Arriendo Oficina / Local (${activeOrg.name})`,
+        document_number: `ARR-${monthPrefix}`,
+        document_type: 'servicio',
+        category: 'arriendo',
+        amount: rent,
+        issue_date: `${monthPrefix}-01`,
+        due_date: `${monthPrefix}-05`,
+        reminder_days_before: 3,
+        expense_type: 'business',
+        notes: 'Gasto fijo mensual de arriendo de inmueble comercial.',
+      });
+      count++;
+    }
+
+    if (internet > 0 && !alreadyExists('Internet')) {
+      addDebt({
+        user_id: activeOrg.created_by || 'system',
+        organization_id: activeOrg.id,
+        supplier_name: `Internet y Telecomunicaciones (${activeOrg.name})`,
+        document_number: `TEL-${monthPrefix}`,
+        document_type: 'servicio',
+        category: 'servicios_basicos',
+        amount: internet,
+        issue_date: `${monthPrefix}-01`,
+        due_date: `${monthPrefix}-10`,
+        reminder_days_before: 3,
+        expense_type: 'business',
+        notes: 'Servicio mensual de internet y conectividad.',
+      });
+      count++;
+    }
+
+    if (electricity > 0 && !alreadyExists('Luz')) {
+      addDebt({
+        user_id: activeOrg.created_by || 'system',
+        organization_id: activeOrg.id,
+        supplier_name: `Luz / Electricidad (${activeOrg.name})`,
+        document_number: `LUZ-${monthPrefix}`,
+        document_type: 'servicio',
+        category: 'servicios_basicos',
+        amount: electricity,
+        issue_date: `${monthPrefix}-01`,
+        due_date: midOfMonth,
+        reminder_days_before: 3,
+        expense_type: 'business',
+        notes: 'Gasto operacional mensual de energía eléctrica.',
+      });
+      count++;
+    }
+
+    if (water > 0 && !alreadyExists('Agua')) {
+      addDebt({
+        user_id: activeOrg.created_by || 'system',
+        organization_id: activeOrg.id,
+        supplier_name: `Agua Potable (${activeOrg.name})`,
+        document_number: `AGUA-${monthPrefix}`,
+        document_type: 'servicio',
+        category: 'servicios_basicos',
+        amount: water,
+        issue_date: `${monthPrefix}-01`,
+        due_date: `${monthPrefix}-18`,
+        reminder_days_before: 3,
+        expense_type: 'business',
+        notes: 'Servicio básico de agua potable.',
+      });
+      count++;
+    }
+
+    if (otherFixed > 0 && !alreadyExists('Otros Gastos Fijos')) {
+      addDebt({
+        user_id: activeOrg.created_by || 'system',
+        organization_id: activeOrg.id,
+        supplier_name: `Otros Gastos Fijos (${activeOrg.name})`,
+        document_number: `FIJOS-${monthPrefix}`,
+        document_type: 'servicio',
+        category: 'servicio_suscripcion',
+        amount: otherFixed,
+        issue_date: `${monthPrefix}-01`,
+        due_date: endOfMonth,
+        reminder_days_before: 3,
+        expense_type: 'business',
+        notes: 'Suscripciones mensuales fijas de software o servicios.',
+      });
+      count++;
+    }
+
+    if (count > 0) {
+      setLoadFixedMessage(`¡Éxito! Se cargaron ${count} compromiso(s) fijos del mes (incluyendo sueldo asignado y servicios).`);
+    } else {
+      setLoadFixedMessage('Los gastos fijos de este mes ya estaban registrados en tus cuentas por pagar.');
+    }
+    setTimeout(() => setLoadFixedMessage(null), 4000);
+  };
 
   // Cálculos de Días y Estados en Vivo
   const today = new Date();
@@ -164,6 +321,18 @@ export default function CuentasPorPagarPage() {
           </div>
 
           <div className="flex items-center gap-2 w-full md:w-auto justify-end flex-wrap">
+            {activeOrg?.type === 'business' && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleLoadFixedExpenses}
+                className="bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-100 border-indigo-400/40 gap-1.5 text-xs font-semibold"
+                title="Cargar sueldo asignado y gastos fijos configurados para esta empresa"
+              >
+                <Briefcase className="h-4 w-4 text-emerald-400" />
+                <span>Cargar Gastos Fijos & Sueldo</span>
+              </Button>
+            )}
             <Button
               variant="outline"
               size="sm"
@@ -183,6 +352,14 @@ export default function CuentasPorPagarPage() {
             </Button>
           </div>
         </div>
+
+        {/* Notificación de Carga de Gastos Fijos */}
+        {loadFixedMessage && (
+          <div className="p-3.5 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 flex items-center gap-2 text-xs text-blue-950 dark:text-blue-200 font-medium">
+            <Sparkles className="h-4 w-4 text-blue-600 flex-shrink-0" />
+            <span>{loadFixedMessage}</span>
+          </div>
+        )}
 
         {/* Alerta de Vencimientos Críticos */}
         {(overdueDebts.length > 0 || dueSoonDebts.length > 0) && (

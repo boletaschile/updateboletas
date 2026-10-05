@@ -18,7 +18,7 @@ export type DocumentType =
 export type UserRole = 'owner' | 'admin' | 'member' | 'viewer';
 
 export type DebtStatus = 'pending' | 'due_soon' | 'overdue' | 'paid';
-export type DebtCategory = 'factura_proveedor' | 'credito_bancario' | 'impuesto_f29' | 'previred' | 'servicio_suscripcion' | 'arriendo' | 'tarjeta_credito' | 'otro';
+export type DebtCategory = 'factura_proveedor' | 'credito_bancario' | 'impuesto_f29' | 'previred' | 'servicio_suscripcion' | 'arriendo' | 'tarjeta_credito' | 'sueldo_empresarial' | 'servicios_basicos' | 'otro';
 
 export type ReceivableStatus = 'pending' | 'due_soon' | 'overdue' | 'collected';
 export type ReceivableDocumentType = 'factura_afecta' | 'factura_exenta' | 'boleta_honorarios' | 'orden_compra' | 'cotizacion_aprobada' | 'sin_facturar';
@@ -34,6 +34,15 @@ export interface Profile {
   updated_at: string;
 }
 
+export interface MonthlyFixedExpenses {
+  assigned_salary?: number; // Sueldo asignado del dueño en CLP
+  rent?: number; // Arriendo oficina / local / bodega
+  internet?: number; // Internet / Telecomunicaciones
+  electricity?: number; // Luz / Electricidad
+  water?: number; // Agua potable
+  other_fixed?: number; // Otros gastos fijos mensuales
+}
+
 export interface Organization {
   id: string;
   name: string;
@@ -47,6 +56,10 @@ export interface Organization {
   created_at: string;
   updated_at: string;
   members_count?: number;
+
+  // Sueldo Asignado y Gastos Mensuales
+  assigned_salary?: number | null;
+  monthly_expenses?: MonthlyFixedExpenses | null;
 }
 
 export interface OrganizationMember {

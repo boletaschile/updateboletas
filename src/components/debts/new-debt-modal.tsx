@@ -190,10 +190,12 @@ export function NewDebtModal({ isOpen, onClose }: NewDebtModalProps) {
                 className="h-10 w-full px-2.5 rounded-lg border border-input bg-background text-xs"
               >
                 <option value="factura_proveedor">Factura Proveedor</option>
+                <option value="sueldo_empresarial">Sueldo Asignado / Remuneración Dueño</option>
+                <option value="servicios_basicos">Servicios Básicos (Luz, Agua, Internet)</option>
+                <option value="arriendo">Arriendo Oficina/Local</option>
                 <option value="impuesto_f29">Impuesto F29 (IVA)</option>
                 <option value="previred">Previred (Imposiciones)</option>
                 <option value="credito_bancario">Cuota Crédito Bancario</option>
-                <option value="arriendo">Arriendo Oficina/Local</option>
                 <option value="servicio_suscripcion">Servicio / Suscripción</option>
                 <option value="tarjeta_credito">Tarjeta de Crédito</option>
                 <option value="otro">Otro</option>

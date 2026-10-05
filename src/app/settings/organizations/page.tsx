@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/lib/store/auth-context';
 import { NewOrganizationModal } from '@/components/organizations/new-organization-modal';
 import { EditOrganizationModal } from '@/components/organizations/edit-organization-modal';
+import { formatCLP } from '@/lib/utils';
 import { UserRole, Organization } from '@/types';
 import {
   Building2,
@@ -136,6 +137,61 @@ export default function OrganizationsManagementPage() {
                         {org.type === 'personal' ? 'Nombre Completo / Alias' : 'Razón Social'}
                       </span>
                       <p className="text-xs text-foreground truncate">{org.legal_name}</p>
+                    </div>
+                  )}
+
+                  {/* Sueldo Asignado y Gastos Mensuales (Perfil Empresa) */}
+                  {org.type === 'business' && (
+                    <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-border/80 space-y-1.5">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="font-semibold text-muted-foreground flex items-center gap-1">
+                          <Briefcase className="h-3 w-3 text-blue-600" />
+                          <span>Sueldo Asignado Dueño:</span>
+                        </span>
+                        <span className="font-bold text-blue-700 dark:text-blue-300">
+                          {org.assigned_salary ? formatCLP(org.assigned_salary) : 'No configurado'}
+                        </span>
+                      </div>
+
+                      {org.monthly_expenses && (
+                        <div className="pt-1.5 border-t border-border/60 text-[10px] text-muted-foreground space-y-1">
+                          <span className="font-semibold uppercase tracking-wider block text-[9px] text-muted-foreground">
+                            Gastos Fijos Mensuales Base
+                          </span>
+                          <div className="grid grid-cols-2 gap-x-2 gap-y-0.5">
+                            {org.monthly_expenses.rent ? (
+                              <div className="flex justify-between">
+                                <span>Arriendo:</span>
+                                <span className="font-medium text-foreground">{formatCLP(org.monthly_expenses.rent)}</span>
+                              </div>
+                            ) : null}
+                            {org.monthly_expenses.internet ? (
+                              <div className="flex justify-between">
+                                <span>Internet:</span>
+                                <span className="font-medium text-foreground">{formatCLP(org.monthly_expenses.internet)}</span>
+                              </div>
+                            ) : null}
+                            {org.monthly_expenses.electricity ? (
+                              <div className="flex justify-between">
+                                <span>Luz:</span>
+                                <span className="font-medium text-foreground">{formatCLP(org.monthly_expenses.electricity)}</span>
+                              </div>
+                            ) : null}
+                            {org.monthly_expenses.water ? (
+                              <div className="flex justify-between">
+                                <span>Agua:</span>
+                                <span className="font-medium text-foreground">{formatCLP(org.monthly_expenses.water)}</span>
+                              </div>
+                            ) : null}
+                            {org.monthly_expenses.other_fixed ? (
+                              <div className="flex justify-between">
+                                <span>Otros:</span>
+                                <span className="font-medium text-foreground">{formatCLP(org.monthly_expenses.other_fixed)}</span>
+                              </div>
+                            ) : null}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
 

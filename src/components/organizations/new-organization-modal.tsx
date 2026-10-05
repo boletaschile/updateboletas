@@ -13,8 +13,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/lib/store/auth-context';
-import { validateRUT, formatRUT } from '@/lib/utils';
-import { Building2, User, Plus } from 'lucide-react';
+import { validateRUT, formatRUT, formatCLP } from '@/lib/utils';
+import { Building2, User, Plus, Briefcase } from 'lucide-react';
 
 interface NewOrganizationModalProps {
   isOpen: boolean;
@@ -31,6 +31,11 @@ export function NewOrganizationModal({
   const [rut, setRut] = useState('');
   const [legalName, setLegalName] = useState('');
   const [orgType, setOrgType] = useState<'business' | 'personal'>('personal');
+  const [assignedSalary, setAssignedSalary] = useState<number>(0);
+  const [rent, setRent] = useState<number>(0);
+  const [internet, setInternet] = useState<number>(0);
+  const [electricity, setElectricity] = useState<number>(0);
+  const [water, setWater] = useState<number>(0);
 
   const isRutValid = rut ? validateRUT(rut) : true;
 
@@ -44,11 +49,24 @@ export function NewOrganizationModal({
       rut: rut ? formatRUT(rut) : undefined,
       legal_name: legalName.trim() || name.trim(),
       type: orgType,
+      assigned_salary: assignedSalary || undefined,
+      monthly_expenses: orgType === 'business' ? {
+        assigned_salary: assignedSalary || 0,
+        rent: rent || 0,
+        internet: internet || 0,
+        electricity: electricity || 0,
+        water: water || 0,
+      } : undefined,
     });
 
     setName('');
     setRut('');
     setLegalName('');
+    setAssignedSalary(0);
+    setRent(0);
+    setInternet(0);
+    setElectricity(0);
+    setWater(0);
     onClose();
   };
 
@@ -185,6 +203,30 @@ export function NewOrganizationModal({
                   placeholder="Ej: Comercial e Inversiones del Valle SpA"
                   className="text-xs"
                 />
+              </div>
+
+              <div className="space-y-1.5 pt-1">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-semibold flex items-center gap-1 text-blue-700 dark:text-blue-300">
+                    <Briefcase className="h-3.5 w-3.5" />
+                    <span>Sueldo Asignado Mensual del Dueño (Opcional)</span>
+                  </Label>
+                  {assignedSalary > 0 && (
+                    <span className="text-[11px] font-mono font-bold text-blue-600">
+                      {formatCLP(assignedSalary)}
+                    </span>
+                  )}
+                </div>
+                <Input
+                  type="number"
+                  value={assignedSalary || ''}
+                  onChange={(e) => setAssignedSalary(Number(e.target.value) || 0)}
+                  placeholder="Ej: 1500000"
+                  className="text-xs font-mono"
+                />
+                <p className="text-[10px] text-muted-foreground">
+                  Se considerará como gasto fijo mensual recurrente de la empresa.
+                </p>
               </div>
             </>
           )}

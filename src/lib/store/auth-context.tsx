@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Profile, Organization, OrganizationMember, UserRole } from '@/types';
+import { Profile, Organization, OrganizationMember, UserRole, MonthlyFixedExpenses } from '@/types';
 import { getSupabaseBrowserClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import { ensureUUID } from '@/lib/supabase/db-service';
 
@@ -28,6 +28,8 @@ interface AuthContextType {
     rut?: string;
     legal_name?: string;
     type: 'business' | 'personal';
+    assigned_salary?: number | null;
+    monthly_expenses?: MonthlyFixedExpenses | null;
   }) => Organization;
   updateOrganization: (
     id: string,
@@ -36,6 +38,8 @@ interface AuthContextType {
       rut?: string | null;
       legal_name?: string | null;
       type?: 'business' | 'personal';
+      assigned_salary?: number | null;
+      monthly_expenses?: MonthlyFixedExpenses | null;
     }
   ) => void;
   deleteOrganization: (id: string) => boolean;
@@ -290,6 +294,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     rut?: string;
     legal_name?: string;
     type: 'business' | 'personal';
+    assigned_salary?: number | null;
+    monthly_expenses?: MonthlyFixedExpenses | null;
   }) => {
     const newOrg: Organization = {
       id: ensureUUID(),
@@ -297,6 +303,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       rut: data.rut?.trim() || null,
       legal_name: data.legal_name?.trim() || data.name.trim(),
       type: data.type,
+      assigned_salary: data.assigned_salary ?? null,
+      monthly_expenses: data.monthly_expenses ?? null,
       created_by: user?.id || ensureUUID(),
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -315,6 +323,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       rut?: string | null;
       legal_name?: string | null;
       type?: 'business' | 'personal';
+      assigned_salary?: number | null;
+      monthly_expenses?: MonthlyFixedExpenses | null;
     }
   ) => {
     setOrganizations((prev) =>
@@ -329,6 +339,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               ? (data.legal_name ? data.legal_name.trim() : data.name.trim())
               : org.legal_name,
           type: data.type || org.type,
+          assigned_salary: data.assigned_salary !== undefined ? data.assigned_salary : org.assigned_salary,
+          monthly_expenses: data.monthly_expenses !== undefined ? data.monthly_expenses : org.monthly_expenses,
           updated_at: new Date().toISOString(),
         };
       })
