@@ -209,13 +209,24 @@ export default function DashboardPage() {
   const dueSoonDebts = scopedDebts.filter((d) => d.status === 'due_soon');
   const totalUrgentDebt = [...overdueDebts, ...dueSoonDebts].reduce((acc, d) => acc + d.amount, 0);
 
-  // Costos Fijos Base y Sueldo Asignado de la Empresa
-  const assignedSalary = !isPersonalMode && activeOrg?.assigned_salary ? activeOrg.assigned_salary : 0;
-  const fixedExpensesSum =
-    !isPersonalMode && activeOrg?.monthly_expenses
-      ? Object.values(activeOrg.monthly_expenses).reduce((a, b) => a + (Number(b) || 0), 0)
-      : 0;
-  const companyFixedCostsTotal = assignedSalary + fixedExpensesSum;
+  // Costos Fijos Base y Sueldo Asignado de la Empresa (Evitando duplicar assigned_salary)
+  const assignedSalary = !isPersonalMode
+    ? activeOrg?.assigned_salary || activeOrg?.monthly_expenses?.assigned_salary || 0
+    : 0;
+  const teamSalariesSum = !isPersonalMode
+    ? (activeOrg?.team_salaries || []).reduce((acc, emp) => acc + (Number(emp.amount) || 0), 0)
+    : 0;
+  const totalPayroll = assignedSalary + teamSalariesSum;
+
+  const operationalFixedExpenses = !isPersonalMode && activeOrg?.monthly_expenses
+    ? (Number(activeOrg.monthly_expenses.rent) || 0) +
+      (Number(activeOrg.monthly_expenses.internet) || 0) +
+      (Number(activeOrg.monthly_expenses.electricity) || 0) +
+      (Number(activeOrg.monthly_expenses.water) || 0) +
+      (Number(activeOrg.monthly_expenses.other_fixed) || 0)
+    : 0;
+
+  const companyFixedCostsTotal = totalPayroll + operationalFixedExpenses;
 
   // Ventas o Ingresos del período
   const currentMonthReceivables = useMemo(() => {
@@ -1184,11 +1195,19 @@ export default function DashboardPage() {
               </h3>
               <div className="flex items-center justify-between mt-2 text-[11px] text-muted-foreground">
                 <span className="truncate">
-                  {assignedSalary > 0 ? `Sueldo: ${formatCLP(assignedSalary)}` : 'Sueldo asignado'}
+                  {totalPayroll > 0
+                    ? `Sueldo: ${formatCLP(totalPayroll)}${operationalFixedExpenses > 0 ? ` + Fijos: ${formatCLP(operationalFixedExpenses)}` : ''}`
+                    : operationalFixedExpenses > 0
+                    ? `Fijos: ${formatCLP(operationalFixedExpenses)}`
+                    : 'Sin configurar'}
                 </span>
-                <Link href="/profile" className="text-blue-600 hover:underline font-medium ml-1">
+                <button
+                  type="button"
+                  onClick={() => setIsAssignSalaryModalOpen(true)}
+                  className="text-blue-600 dark:text-blue-400 hover:underline font-semibold ml-1 cursor-pointer"
+                >
                   Editar
-                </Link>
+                </button>
               </div>
             </Card>
 

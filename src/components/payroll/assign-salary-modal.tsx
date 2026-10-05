@@ -30,6 +30,12 @@ import {
   HelpCircle,
   Calendar,
   Sparkles,
+  Home,
+  Wifi,
+  Lightbulb,
+  Droplets,
+  Receipt,
+  Landmark,
 } from 'lucide-react';
 
 interface AssignSalaryModalProps {
@@ -37,6 +43,7 @@ interface AssignSalaryModalProps {
   onClose: () => void;
   targetOrgId?: string;
   onSuccess?: () => void;
+  initialTab?: 'salaries' | 'fixed_costs';
 }
 
 export function AssignSalaryModal({
@@ -44,6 +51,7 @@ export function AssignSalaryModal({
   onClose,
   targetOrgId,
   onSuccess,
+  initialTab = 'salaries',
 }: AssignSalaryModalProps) {
   const { organizations, activeOrgId, activeOrg, updateOrganization } = useAuth();
   const { addDebt, debts } = useReceipts();
@@ -55,29 +63,46 @@ export function AssignSalaryModal({
     (activeOrg?.type === 'business' ? activeOrg.id : businessOrgs[0]?.id || '');
 
   const [selectedOrgId, setSelectedOrgId] = useState<string>(defaultOrgId);
+  const [activeTab, setActiveTab] = useState<'salaries' | 'fixed_costs'>(initialTab);
 
   useEffect(() => {
     if (defaultOrgId) {
       setSelectedOrgId(defaultOrgId);
     }
-  }, [defaultOrgId, isOpen]);
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [defaultOrgId, initialTab, isOpen]);
 
   const currentOrg = organizations.find((o) => o.id === selectedOrgId);
 
-  // Estados del Formulario
+  // Estados del Formulario: Sueldos
   const [assignedSalary, setAssignedSalary] = useState<number>(0);
   const [paymentDay, setPaymentDay] = useState<number>(30);
-  const [syncToCurrentMonthDebts, setSyncToCurrentMonthDebts] = useState<boolean>(true);
-
-  // Lista de Colaboradores / Equipo
   const [teamSalaries, setTeamSalaries] = useState<EmployeeSalaryItem[]>([]);
+
+  // Estados del Formulario: Gastos Fijos Operacionales
+  const [rent, setRent] = useState<number>(0);
+  const [internet, setInternet] = useState<number>(0);
+  const [electricity, setElectricity] = useState<number>(0);
+  const [water, setWater] = useState<number>(0);
+  const [otherFixed, setOtherFixed] = useState<number>(0);
+
+  // Sincronización a Cuentas por Pagar
+  const [syncToCurrentMonthDebts, setSyncToCurrentMonthDebts] = useState<boolean>(true);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   // Cargar datos al abrir modal o cambiar empresa
   useEffect(() => {
     if (currentOrg) {
-      setAssignedSalary(currentOrg.assigned_salary || currentOrg.monthly_expenses?.assigned_salary || 0);
+      const exp = currentOrg.monthly_expenses || {};
+      setAssignedSalary(currentOrg.assigned_salary || exp.assigned_salary || 0);
       setTeamSalaries(currentOrg.team_salaries || []);
+      setRent(exp.rent || 0);
+      setInternet(exp.internet || 0);
+      setElectricity(exp.electricity || 0);
+      setWater(exp.water || 0);
+      setOtherFixed(exp.other_fixed || 0);
       setSuccessMessage(null);
     }
   }, [currentOrg, isOpen]);
@@ -105,9 +130,11 @@ export function AssignSalaryModal({
     setTeamSalaries((prev) => prev.filter((emp) => emp.id !== id));
   };
 
-  // Cálculos de Totales de Nómina
+  // Cálculos de Totales
   const totalTeamSalaries = teamSalaries.reduce((acc, emp) => acc + (emp.amount || 0), 0);
-  const grandTotalPayroll = (assignedSalary || 0) + totalTeamSalaries;
+  const totalPayroll = (assignedSalary || 0) + totalTeamSalaries;
+  const totalOperationalFixed = (rent || 0) + (internet || 0) + (electricity || 0) + (water || 0) + (otherFixed || 0);
+  const grandTotalFixedAndSalaries = totalPayroll + totalOperationalFixed;
 
   // Guardar y Aplicar
   const handleSave = (e: React.FormEvent) => {
@@ -116,7 +143,6 @@ export function AssignSalaryModal({
 
     // 1. Actualizar organización en AuthContext
     const validTeam = teamSalaries.filter((emp) => emp.name.trim() && emp.amount > 0);
-    const existingExpenses = currentOrg.monthly_expenses || {};
 
     updateOrganization(currentOrg.id, {
       name: currentOrg.name,
@@ -126,8 +152,12 @@ export function AssignSalaryModal({
       assigned_salary: assignedSalary || 0,
       team_salaries: validTeam,
       monthly_expenses: {
-        ...existingExpenses,
-        assigned_salary: assignedSalary || 0,
+        rent: rent || 0,
+        internet: internet || 0,
+        electricity: electricity || 0,
+        water: water || 0,
+        other_fixed: otherFixed || 0,
+        assigned_salary: assignedSalary || 0, // Mantenido para retrocompatibilidad
       },
     });
 
@@ -149,7 +179,7 @@ export function AssignSalaryModal({
         );
       };
 
-      // Sueldo Asignado Dueño
+      // A) Sueldo Asignado Dueño
       if (assignedSalary > 0 && !alreadyExists('Sueldo Asignado')) {
         addDebt({
           user_id: currentOrg.created_by || 'system',
@@ -167,7 +197,7 @@ export function AssignSalaryModal({
         });
       }
 
-      // Sueldos Colaboradores
+      // B) Sueldos Colaboradores
       validTeam.forEach((emp) => {
         const empSnippet = `Sueldo: ${emp.name}`;
         if (!alreadyExists(empSnippet)) {
@@ -188,9 +218,95 @@ export function AssignSalaryModal({
           });
         }
       });
+
+      // C) Gastos Fijos Operacionales
+      if (rent > 0 && !alreadyExists('Arriendo')) {
+        addDebt({
+          user_id: currentOrg.created_by || 'system',
+          organization_id: currentOrg.id,
+          supplier_name: `Arriendo Oficina / Local (${currentOrg.name})`,
+          document_number: `ARR-${monthPrefix}`,
+          document_type: 'otro',
+          category: 'arriendo',
+          amount: rent,
+          issue_date: `${monthPrefix}-01`,
+          due_date: `${monthPrefix}-05`,
+          reminder_days_before: 3,
+          expense_type: 'business',
+          notes: 'Gasto fijo mensual de arriendo de oficinas o local comercial.',
+        });
+      }
+
+      if (internet > 0 && !alreadyExists('Internet')) {
+        addDebt({
+          user_id: currentOrg.created_by || 'system',
+          organization_id: currentOrg.id,
+          supplier_name: `Internet & Conectividad (${currentOrg.name})`,
+          document_number: `INT-${monthPrefix}`,
+          document_type: 'otro',
+          category: 'servicios_basicos',
+          amount: internet,
+          issue_date: `${monthPrefix}-01`,
+          due_date: `${monthPrefix}-15`,
+          reminder_days_before: 3,
+          expense_type: 'business',
+          notes: 'Servicio mensual de internet y enlaces.',
+        });
+      }
+
+      if (electricity > 0 && !alreadyExists('Luz')) {
+        addDebt({
+          user_id: currentOrg.created_by || 'system',
+          organization_id: currentOrg.id,
+          supplier_name: `Luz / Electricidad (${currentOrg.name})`,
+          document_number: `LUZ-${monthPrefix}`,
+          document_type: 'otro',
+          category: 'servicios_basicos',
+          amount: electricity,
+          issue_date: `${monthPrefix}-01`,
+          due_date: `${monthPrefix}-18`,
+          reminder_days_before: 3,
+          expense_type: 'business',
+          notes: 'Gasto fijo de suministro eléctrico.',
+        });
+      }
+
+      if (water > 0 && !alreadyExists('Agua')) {
+        addDebt({
+          user_id: currentOrg.created_by || 'system',
+          organization_id: currentOrg.id,
+          supplier_name: `Agua Potable (${currentOrg.name})`,
+          document_number: `AGUA-${monthPrefix}`,
+          document_type: 'otro',
+          category: 'servicios_basicos',
+          amount: water,
+          issue_date: `${monthPrefix}-01`,
+          due_date: `${monthPrefix}-20`,
+          reminder_days_before: 3,
+          expense_type: 'business',
+          notes: 'Gasto fijo de agua potable.',
+        });
+      }
+
+      if (otherFixed > 0 && !alreadyExists('Otros Fijos')) {
+        addDebt({
+          user_id: currentOrg.created_by || 'system',
+          organization_id: currentOrg.id,
+          supplier_name: `Otros Gastos Fijos / Software (${currentOrg.name})`,
+          document_number: `FIJ-${monthPrefix}`,
+          document_type: 'otro',
+          category: 'otro',
+          amount: otherFixed,
+          issue_date: `${monthPrefix}-01`,
+          due_date: endOfMonth,
+          reminder_days_before: 3,
+          expense_type: 'business',
+          notes: 'Otros costos fijos mensuales (software SaaS, contabilidad externa, etc.).',
+        });
+      }
     }
 
-    setSuccessMessage('¡Sueldos asignados exitosamente! Se actualizaron Cuentas por Pagar y Flujo de Caja.');
+    setSuccessMessage('¡Costos fijos y sueldos guardados exitosamente! Se actualizaron Cuentas por Pagar y Flujo de Caja.');
     setTimeout(() => {
       onSuccess?.();
       onClose();
@@ -199,28 +315,28 @@ export function AssignSalaryModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-2xl max-h-[92vh] overflow-y-auto">
         <DialogHeader>
           <div className="flex items-center gap-2">
             <div className="h-9 w-9 rounded-xl bg-blue-100 dark:bg-blue-950/60 text-blue-600 flex items-center justify-center">
-              <Briefcase className="h-5 w-5" />
+              <Landmark className="h-5 w-5" />
             </div>
             <div>
               <DialogTitle className="text-base font-bold flex items-center gap-2">
-                <span>Asignación de Sueldos & Remuneraciones</span>
+                <span>Costos Fijos & Sueldos de la Empresa</span>
                 <Badge variant="outline" className="text-[10px] bg-blue-50 text-blue-700 border-blue-200">
                   Empresa
                 </Badge>
               </DialogTitle>
               <DialogDescription className="text-xs">
-                Fija tu sueldo asignado como dueño y registra las remuneraciones de tu equipo para controlar el flujo de caja.
+                Configura tu sueldo asignado como dueño, remuneraciones del equipo y servicios fijos mensuales (arriendo, luz, agua, internet).
               </DialogDescription>
             </div>
           </div>
         </DialogHeader>
 
         <form onSubmit={handleSave} className="space-y-4 py-2 text-xs">
-          {/* Selector de Empresa */}
+          {/* Selector de Empresa si hay más de 1 */}
           {businessOrgs.length > 1 && (
             <div className="space-y-1 bg-muted/30 p-2.5 rounded-xl border border-border">
               <Label className="text-xs font-semibold flex items-center gap-1.5">
@@ -241,175 +357,341 @@ export function AssignSalaryModal({
             </div>
           )}
 
-          {/* Bloque 1: Sueldo Asignado del Dueño (Sueldo Patronal) */}
-          <div className="p-3.5 rounded-xl border border-blue-200/80 bg-blue-50/20 dark:bg-blue-950/20 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="font-bold text-xs text-blue-900 dark:text-blue-200 flex items-center gap-1.5">
-                <Briefcase className="h-4 w-4 text-blue-600" />
-                <span>1. Sueldo Asignado del Dueño / Socio (Patronal)</span>
-              </span>
-              <Badge variant="outline" className="text-[9px] border-blue-300 text-blue-700 bg-blue-50">
-                Gasto Deducible SII
-              </Badge>
-            </div>
-
-            <p className="text-[11px] text-muted-foreground leading-relaxed">
-              El <strong>Sueldo Empresarial</strong> (Art. 31 LIR) es la asignación mensual que retiras formalmente por tu trabajo en la empresa. Se descuenta de las ganancias de la empresa y pasa a tu cuenta personal.
-            </p>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-              <div className="space-y-1">
-                <Label className="text-[11px] font-semibold text-foreground">
-                  Monto Líquido Mensual (CLP)
-                </Label>
-                <div className="relative">
-                  <span className="absolute left-3 top-2 text-muted-foreground text-xs font-mono">$</span>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="10000"
-                    placeholder="1500000"
-                    value={assignedSalary || ''}
-                    onChange={(e) => setAssignedSalary(Number(e.target.value))}
-                    className="pl-7 h-9 text-xs font-mono font-bold text-foreground"
-                  />
-                </div>
-                <span className="text-[10px] text-muted-foreground">
-                  {assignedSalary > 0 ? formatCLP(assignedSalary) + ' mensuales' : 'Sin sueldo asignado'}
-                </span>
-              </div>
-
-              <div className="space-y-1">
-                <Label className="text-[11px] font-semibold text-foreground">
-                  Día de Pago del Mes
-                </Label>
-                <div className="relative">
-                  <Calendar className="h-3.5 w-3.5 absolute left-3 top-2.5 text-muted-foreground" />
-                  <select
-                    value={paymentDay}
-                    onChange={(e) => setPaymentDay(parseInt(e.target.value, 10))}
-                    className="w-full pl-8 h-9 rounded-lg border border-input bg-background text-foreground text-xs"
-                  >
-                    <option value={30}>Día 30 (Fin de mes estándar)</option>
-                    <option value={5}>Día 5 del mes siguiente</option>
-                    <option value={15}>Día 15 (Quincena)</option>
-                    <option value={25}>Día 25</option>
-                    <option value={28}>Día 28</option>
-                  </select>
-                </div>
-                <span className="text-[10px] text-muted-foreground">
-                  Se proyectará en el Flujo de Caja en esa fecha.
-                </span>
-              </div>
-            </div>
+          {/* Navegación por Pestañas */}
+          <div className="grid grid-cols-2 gap-2 p-1 bg-muted/60 rounded-xl border border-border">
+            <button
+              type="button"
+              onClick={() => setActiveTab('salaries')}
+              className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg font-bold text-xs transition-all ${
+                activeTab === 'salaries'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+              }`}
+            >
+              <Briefcase className="h-4 w-4" />
+              <span>Sueldos & Nómina ({formatCLP(totalPayroll)})</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('fixed_costs')}
+              className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg font-bold text-xs transition-all ${
+                activeTab === 'fixed_costs'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+              }`}
+            >
+              <Home className="h-4 w-4" />
+              <span>Servicios & Fijos ({formatCLP(totalOperationalFixed)})</span>
+            </button>
           </div>
 
-          {/* Bloque 2: Sueldos de Colaboradores / Equipo */}
-          <div className="p-3.5 rounded-xl border border-border bg-card space-y-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <span className="font-bold text-xs text-foreground flex items-center gap-1.5">
-                  <Users className="h-4 w-4 text-emerald-600" />
-                  <span>2. Sueldos de Empleados y Colaboradores</span>
-                </span>
-                <span className="text-[10px] text-muted-foreground block mt-0.5">
-                  Registra remuneraciones de personal contratado o colaboradores clave.
-                </span>
-              </div>
+          {/* ============================================================== */}
+          {/* PESTAÑA 1: SUELDOS & NÓMINA                                    */}
+          {/* ============================================================== */}
+          {activeTab === 'salaries' && (
+            <div className="space-y-4">
+              {/* Bloque 1: Sueldo Asignado del Dueño (Sueldo Patronal) */}
+              <div className="p-3.5 rounded-xl border border-blue-200/80 bg-blue-50/20 dark:bg-blue-950/20 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-xs text-blue-900 dark:text-blue-200 flex items-center gap-1.5">
+                    <Briefcase className="h-4 w-4 text-blue-600" />
+                    <span>1. Sueldo Asignado del Dueño / Socio (Patronal)</span>
+                  </span>
+                  <Badge variant="outline" className="text-[9px] border-blue-300 text-blue-700 bg-blue-50">
+                    Gasto Deducible SII
+                  </Badge>
+                </div>
 
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={handleAddEmployee}
-                className="h-7 text-[11px] gap-1 text-emerald-700 dark:text-emerald-300 border-emerald-300 hover:bg-emerald-50"
-              >
-                <Plus className="h-3 w-3" />
-                <span>+ Agregar Colaborador</span>
-              </Button>
-            </div>
-
-            {teamSalaries.length === 0 ? (
-              <div className="p-4 rounded-lg bg-muted/30 border border-dashed text-center text-muted-foreground">
-                <p className="text-[11px]">No hay colaboradores adicionales agregados a la nómina.</p>
-                <p className="text-[10px] mt-0.5">
-                  Si tienes empleados o asistentes, haz clic en "+ Agregar Colaborador".
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  El <strong>Sueldo Empresarial</strong> (Art. 31 LIR) es la asignación mensual que retiras formalmente por tu trabajo en la empresa. Se descuenta de las utilidades de la empresa como gasto aceptado y pasa a tu cuenta personal.
                 </p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {teamSalaries.map((emp, index) => (
-                  <div
-                    key={emp.id}
-                    className="p-2.5 rounded-lg border border-border/80 bg-muted/20 flex flex-col sm:flex-row items-stretch sm:items-center gap-2"
-                  >
-                    <div className="flex-1 space-y-0.5">
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold text-foreground">
+                      Monto Líquido Mensual (CLP)
+                    </Label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-2 text-muted-foreground font-mono font-bold">$</span>
                       <Input
-                        placeholder="Nombre completo colaborador"
-                        value={emp.name}
-                        onChange={(e) => handleUpdateEmployee(emp.id, 'name', e.target.value)}
-                        className="h-8 text-xs"
+                        type="number"
+                        min="0"
+                        step="50000"
+                        value={assignedSalary || ''}
+                        onChange={(e) => setAssignedSalary(Number(e.target.value) || 0)}
+                        placeholder="Ej: 800000"
+                        className="pl-7 font-mono font-bold text-sm"
                       />
                     </div>
-                    <div className="w-full sm:w-36 space-y-0.5">
-                      <Input
-                        placeholder="Cargo / Rol (ej: Ventas)"
-                        value={emp.role}
-                        onChange={(e) => handleUpdateEmployee(emp.id, 'role', e.target.value)}
-                        className="h-8 text-xs"
-                      />
-                    </div>
-                    <div className="w-full sm:w-32 space-y-0.5">
-                      <div className="relative">
-                        <span className="absolute left-2.5 top-1.5 text-muted-foreground text-xs font-mono">$</span>
-                        <Input
-                          type="number"
-                          min="0"
-                          step="10000"
-                          placeholder="Monto líquido"
-                          value={emp.amount || ''}
-                          onChange={(e) => handleUpdateEmployee(emp.id, 'amount', Number(e.target.value))}
-                          className="pl-6 h-8 text-xs font-mono font-semibold"
-                        />
-                      </div>
-                    </div>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => handleRemoveEmployee(emp.id)}
-                      className="h-8 w-8 p-0 text-muted-foreground hover:text-rose-600 hover:bg-rose-50"
-                      title="Eliminar colaborador"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
+                    <span className="text-[10px] text-muted-foreground block">
+                      {assignedSalary > 0 ? `${formatCLP(assignedSalary)} mensuales` : 'Sin sueldo patronal'}
+                    </span>
                   </div>
-                ))}
+
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold text-foreground">
+                      Día de Pago del Mes
+                    </Label>
+                    <div className="relative">
+                      <Calendar className="h-4 w-4 absolute left-3 top-2.5 text-muted-foreground" />
+                      <select
+                        value={paymentDay}
+                        onChange={(e) => setPaymentDay(parseInt(e.target.value, 10))}
+                        className="w-full h-9 pl-9 pr-3 rounded-lg border border-input bg-background text-foreground text-xs"
+                      >
+                        <option value={30}>Día 30 (Fin de mes estándar)</option>
+                        <option value={28}>Día 28</option>
+                        <option value={25}>Día 25</option>
+                        <option value={5}>Día 5 (Mes vencido)</option>
+                        <option value={10}>Día 10</option>
+                      </select>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground block">
+                      Se proyectará en el Flujo de Caja en esa fecha.
+                    </span>
+                  </div>
+                </div>
               </div>
-            )}
-          </div>
 
-          {/* Resumen Total de Nómina */}
-          <div className="p-3 rounded-xl bg-gradient-to-r from-blue-900/10 via-indigo-900/10 to-emerald-900/10 border border-blue-500/20 flex items-center justify-between">
-            <div className="space-y-0.5">
-              <span className="text-[11px] font-semibold text-muted-foreground block">
-                Total Presupuesto Mensual de Remuneraciones:
+              {/* Bloque 2: Sueldos de Colaboradores / Empleados */}
+              <div className="p-3.5 rounded-xl border border-border bg-card space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <span className="font-bold text-xs text-foreground flex items-center gap-1.5">
+                      <Users className="h-4 w-4 text-emerald-600" />
+                      <span>2. Sueldos de Empleados y Colaboradores</span>
+                    </span>
+                    <p className="text-[11px] text-muted-foreground">
+                      Registra remuneraciones de personal contratado o colaboradores clave.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={handleAddEmployee}
+                    className="text-xs gap-1 border-emerald-500/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+                  >
+                    <Plus className="h-3.5 w-3.5 text-emerald-600" />
+                    <span>Agregar Colaborador</span>
+                  </Button>
+                </div>
+
+                {teamSalaries.length === 0 ? (
+                  <div className="p-5 text-center border border-dashed rounded-xl text-muted-foreground space-y-1">
+                    <p className="text-xs">No hay colaboradores adicionales agregados a la nómina.</p>
+                    <p className="text-[11px]">Si tienes empleados o asistentes, haz clic en &quot;+ Agregar Colaborador&quot;.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {teamSalaries.map((emp, index) => (
+                      <div
+                        key={emp.id}
+                        className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 p-2.5 rounded-xl bg-muted/40 border border-border"
+                      >
+                        <div className="flex-1 space-y-0.5">
+                          <Input
+                            placeholder="Nombre Completo (ej: Juan Soto)"
+                            value={emp.name}
+                            onChange={(e) => handleUpdateEmployee(emp.id, 'name', e.target.value)}
+                            className="h-8 text-xs"
+                          />
+                        </div>
+                        <div className="w-full sm:w-36 space-y-0.5">
+                          <Input
+                            placeholder="Cargo / Rol (ej: Ventas)"
+                            value={emp.role}
+                            onChange={(e) => handleUpdateEmployee(emp.id, 'role', e.target.value)}
+                            className="h-8 text-xs"
+                          />
+                        </div>
+                        <div className="w-full sm:w-32 space-y-0.5">
+                          <div className="relative">
+                            <span className="absolute left-2.5 top-1.5 text-muted-foreground text-xs font-mono">$</span>
+                            <Input
+                              type="number"
+                              min="0"
+                              step="10000"
+                              placeholder="Monto líquido"
+                              value={emp.amount || ''}
+                              onChange={(e) => handleUpdateEmployee(emp.id, 'amount', Number(e.target.value))}
+                              className="pl-6 h-8 text-xs font-mono font-semibold"
+                            />
+                          </div>
+                        </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleRemoveEmployee(emp.id)}
+                          className="h-8 w-8 p-0 text-muted-foreground hover:text-rose-600 hover:bg-rose-50"
+                          title="Eliminar colaborador"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ============================================================== */}
+          {/* PESTAÑA 2: SERVICIOS & GASTOS FIJOS OPERACIONALES              */}
+          {/* ============================================================== */}
+          {activeTab === 'fixed_costs' && (
+            <div className="space-y-4">
+              <div className="p-3.5 rounded-xl border border-slate-200/80 bg-slate-50/50 dark:bg-slate-900/30 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-xs text-foreground flex items-center gap-1.5">
+                    <Home className="h-4 w-4 text-amber-600" />
+                    <span>Gastos Fijos Mensuales Base (Servicios & Arriendos)</span>
+                  </span>
+                  <Badge variant="outline" className="text-[9px] border-amber-300 text-amber-700 bg-amber-50">
+                    Operación Pyme
+                  </Badge>
+                </div>
+
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  Compromisos indispensables que tu negocio debe pagar cada mes independientemente de sus ventas. Se consideran en el cálculo del flujo de caja de semanas 1, 2 y 3.
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  {/* Arriendo */}
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium flex items-center gap-1 text-foreground">
+                      <Home className="h-3.5 w-3.5 text-amber-600" />
+                      <span>Arriendo Oficina / Local / Bodega</span>
+                    </Label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-2 text-muted-foreground font-mono font-bold">$</span>
+                      <Input
+                        type="number"
+                        min="0"
+                        step="10000"
+                        value={rent || ''}
+                        onChange={(e) => setRent(Number(e.target.value) || 0)}
+                        placeholder="Ej: 450000"
+                        className="pl-7 font-mono font-bold text-xs"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Internet */}
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium flex items-center gap-1 text-foreground">
+                      <Wifi className="h-3.5 w-3.5 text-indigo-600" />
+                      <span>Internet / Telecomunicaciones</span>
+                    </Label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-2 text-muted-foreground font-mono font-bold">$</span>
+                      <Input
+                        type="number"
+                        min="0"
+                        step="5000"
+                        value={internet || ''}
+                        onChange={(e) => setInternet(Number(e.target.value) || 0)}
+                        placeholder="Ej: 35000"
+                        className="pl-7 font-mono font-bold text-xs"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Luz */}
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium flex items-center gap-1 text-foreground">
+                      <Lightbulb className="h-3.5 w-3.5 text-amber-500" />
+                      <span>Luz (Electricidad)</span>
+                    </Label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-2 text-muted-foreground font-mono font-bold">$</span>
+                      <Input
+                        type="number"
+                        min="0"
+                        step="5000"
+                        value={electricity || ''}
+                        onChange={(e) => setElectricity(Number(e.target.value) || 0)}
+                        placeholder="Ej: 40000"
+                        className="pl-7 font-mono font-bold text-xs"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Agua */}
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium flex items-center gap-1 text-foreground">
+                      <Droplets className="h-3.5 w-3.5 text-cyan-600" />
+                      <span>Agua Potable</span>
+                    </Label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-2 text-muted-foreground font-mono font-bold">$</span>
+                      <Input
+                        type="number"
+                        min="0"
+                        step="5000"
+                        value={water || ''}
+                        onChange={(e) => setWater(Number(e.target.value) || 0)}
+                        placeholder="Ej: 15000"
+                        className="pl-7 font-mono font-bold text-xs"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Otros Gastos Fijos */}
+                  <div className="sm:col-span-2 space-y-1">
+                    <Label className="text-xs font-medium flex items-center gap-1 text-foreground">
+                      <Receipt className="h-3.5 w-3.5 text-slate-500" />
+                      <span>Otros Gastos Fijos (Software SaaS, Alarmas, Contador)</span>
+                    </Label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-2 text-muted-foreground font-mono font-bold">$</span>
+                      <Input
+                        type="number"
+                        min="0"
+                        step="10000"
+                        value={otherFixed || ''}
+                        onChange={(e) => setOtherFixed(Number(e.target.value) || 0)}
+                        placeholder="Ej: 60000"
+                        className="pl-7 font-mono font-bold text-xs"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ============================================================== */}
+          {/* RESUMEN GLOBAL CONSOLIDADO                                     */}
+          {/* ============================================================== */}
+          <div className="p-3.5 rounded-xl bg-gradient-to-r from-blue-900/10 via-indigo-900/10 to-teal-900/10 border border-blue-500/20 space-y-2">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1">
+              <span className="font-bold text-xs text-foreground">
+                Resumen de Costos Fijos & Sueldos del Mes:
               </span>
-              <span className="text-[10px] text-muted-foreground">
-                Sueldo dueño ({formatCLP(assignedSalary || 0)}) + Equipo ({formatCLP(totalTeamSalaries)})
+              <span className="text-xl font-black font-mono text-blue-700 dark:text-blue-300">
+                {formatCLP(grandTotalFixedAndSalaries)}
               </span>
             </div>
-            <div className="text-right">
-              <span className="text-lg font-black font-mono text-foreground block">
-                {formatCLP(grandTotalPayroll)}
-              </span>
-              <span className="text-[10px] text-blue-600 dark:text-blue-400 font-medium">
-                Costo mensual fijo
-              </span>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-2 border-t border-border/60 text-[11px] text-muted-foreground">
+              <div>
+                <span className="block text-[10px] uppercase font-semibold text-muted-foreground">Sueldo Dueño:</span>
+                <span className="font-bold text-foreground font-mono">{formatCLP(assignedSalary || 0)}</span>
+              </div>
+              <div>
+                <span className="block text-[10px] uppercase font-semibold text-muted-foreground">Nómina Equipo:</span>
+                <span className="font-bold text-foreground font-mono">{formatCLP(totalTeamSalaries)}</span>
+              </div>
+              <div className="col-span-2 sm:col-span-1">
+                <span className="block text-[10px] uppercase font-semibold text-muted-foreground">Gastos Operacionales:</span>
+                <span className="font-bold text-foreground font-mono">{formatCLP(totalOperationalFixed)}</span>
+              </div>
             </div>
           </div>
 
-          {/* Opción de Sincronización Inmediata a Cuentas por Pagar */}
+          {/* Sincronización Automática a Cuentas por Pagar */}
           <div className="flex items-start gap-2.5 p-3 rounded-xl bg-muted/40 border border-border">
             <input
               type="checkbox"
@@ -420,10 +702,10 @@ export function AssignSalaryModal({
             />
             <label htmlFor="syncDebts" className="text-xs text-foreground cursor-pointer select-none">
               <span className="font-semibold block">
-                Crear automáticamente los compromisos de pago en Cuentas por Pagar de este mes
+                Crear automáticamente los compromisos en Cuentas por Pagar de este mes
               </span>
               <span className="text-[11px] text-muted-foreground block mt-0.5">
-                Aparecerán listados como compromisos pendientes a pagar a fin de mes y se proyectarán en el Flujo de Caja.
+                Genera los registros para sueldos y servicios configurados en este mes, proyectándolos en el Flujo de Caja y evitando duplicidades.
               </span>
             </label>
           </div>
@@ -445,7 +727,7 @@ export function AssignSalaryModal({
               className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs gap-1.5 shadow-sm"
             >
               <CheckCircle2 className="h-4 w-4" />
-              <span>Guardar y Asignar Sueldos</span>
+              <span>Guardar Costos Fijos & Sueldos</span>
             </Button>
           </DialogFooter>
         </form>

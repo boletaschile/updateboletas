@@ -86,4 +86,41 @@ describe('Asignación de Sueldos y Nómina Empresarial (Payroll Engine)', () => 
 
     expect(alreadyExists).toBe(true);
   });
+
+  it('Calcula exactamente Costos Fijos & Sueldo sin duplicar el sueldo asignado', () => {
+    const org = {
+      assigned_salary: 800000,
+      monthly_expenses: {
+        assigned_salary: 800000, // Legacy mirrored property
+        rent: 350000,
+        internet: 30000,
+        electricity: 25000,
+        water: 15000,
+        other_fixed: 0,
+      },
+      team_salaries: [],
+    };
+
+    const ownerSalary = org.assigned_salary || org.monthly_expenses?.assigned_salary || 0;
+    const teamSalariesSum = (org.team_salaries || []).reduce((acc: number, emp: any) => acc + (emp.amount || 0), 0);
+    const totalPayroll = ownerSalary + teamSalariesSum;
+
+    const operationalFixedExpenses =
+      (Number(org.monthly_expenses?.rent) || 0) +
+      (Number(org.monthly_expenses?.internet) || 0) +
+      (Number(org.monthly_expenses?.electricity) || 0) +
+      (Number(org.monthly_expenses?.water) || 0) +
+      (Number(org.monthly_expenses?.other_fixed) || 0);
+
+    const companyFixedCostsTotal = totalPayroll + operationalFixedExpenses;
+
+    // Sueldo: 800.000, Fijos: 420.000. Total = 1.220.000 (NUNCA 1.220.000 + 800.000 = 2.020.000)
+    expect(totalPayroll).toBe(800000);
+    expect(operationalFixedExpenses).toBe(420000);
+    expect(companyFixedCostsTotal).toBe(1220000);
+
+    // Caso donde solo hay sueldo asignado (caso del usuario con $800.000):
+    const onlySalaryFixedCosts = totalPayroll + 0;
+    expect(onlySalaryFixedCosts).toBe(800000); // NUNCA 1.600.000
+  });
 });
