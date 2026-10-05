@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { DEFAULT_SUPABASE_URL, DEFAULT_SUPABASE_ANON_KEY } from '@/lib/supabase/client';
+import { DEFAULT_SERVICE_ROLE_KEY } from '@/lib/supabase/admin';
 
 export async function POST(request: Request) {
   try {
@@ -10,13 +12,9 @@ export async function POST(request: Request) {
 
     const cleanEmail = email.trim().toLowerCase();
     const cleanPassword = password || 'BoletasChile2026!';
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-    if (!supabaseUrl || !supabaseAnonKey) {
-      return NextResponse.json({ error: 'Supabase no configurado' }, { status: 500 });
-    }
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || DEFAULT_SUPABASE_URL;
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_ANON_KEY;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || DEFAULT_SERVICE_ROLE_KEY;
 
     const supabaseAnon = createClient(supabaseUrl, supabaseAnonKey);
     let { data: authData, error: authError } = await supabaseAnon.auth.signInWithPassword({
