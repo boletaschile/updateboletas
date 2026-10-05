@@ -12,6 +12,8 @@ export interface ParsedExpenseRow {
   expenseType: ExpenseType;
   categoryName: string;
   totalAmount: number;
+  netAmount?: number;
+  taxAmount?: number;
   paymentMethod: string;
   notes?: string;
   isValid: boolean;
@@ -109,21 +111,61 @@ export async function parseExpensesExcelFile(
   file: File,
   fallbackMonth?: string
 ): Promise<ExcelImportSummary> {
-  const buffer = await file.arrayBuffer();
-  const workbook = XLSX.read(buffer, { type: 'array', cellDates: false });
+  let rawData: any[][] = [];
+  const fileName = file.name.toLowerCase();
+  const isCSV = fileName.endsWith('.csv');
 
-  // Tomar la primera hoja (o la que se llame 'Gastos y Boletas')
-  const sheetName =
-    workbook.SheetNames.find((n) => n.toLowerCase().includes('gasto') || n.toLowerCase().includes('boleta')) ||
-    workbook.SheetNames[0];
+  if (isCSV) {
+    const text = await file.text();
+    const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+    if (lines.length < 2) {
+      throw new Error('El archivo CSV está vacío o solo contiene encabezados.');
+    }
 
-  const worksheet = workbook.Sheets[sheetName];
-  if (!worksheet) {
-    throw new Error('La planilla no contiene hojas de cálculo válidas.');
+    const firstLine = lines[0];
+    const semiCount = (firstLine.match(/;/g) || []).length;
+    const commaCount = (firstLine.match(/,/g) || []).length;
+    const delimiter = semiCount >= commaCount && semiCount > 0 ? ';' : ',';
+
+    rawData = lines.map((line) => {
+      const result: string[] = [];
+      let current = '';
+      let inQuotes = false;
+      for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        if (char === '"') {
+          if (inQuotes && line[i + 1] === '"') {
+            current += '"';
+            i++;
+          } else {
+            inQuotes = !inQuotes;
+          }
+        } else if (char === delimiter && !inQuotes) {
+          result.push(current.trim());
+          current = '';
+        } else {
+          current += char;
+        }
+      }
+      result.push(current.trim());
+      return result;
+    });
+  } else {
+    const buffer = await file.arrayBuffer();
+    const workbook = XLSX.read(buffer, { type: 'array', cellDates: false });
+
+    // Tomar la primera hoja (o la que se llame 'Gastos y Boletas')
+    const sheetName =
+      workbook.SheetNames.find((n) => n.toLowerCase().includes('gasto') || n.toLowerCase().includes('boleta') || n.toLowerCase().includes('compra')) ||
+      workbook.SheetNames[0];
+
+    const worksheet = workbook.Sheets[sheetName];
+    if (!worksheet) {
+      throw new Error('La planilla no contiene hojas de cálculo válidas.');
+    }
+
+    rawData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
   }
-
-  // Convertir a matriz de objetos [ [header1, header2], [val1, val2] ]
-  const rawData: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
 
   if (rawData.length < 2) {
     throw new Error('La planilla está vacía o solo contiene encabezados.');
@@ -133,7 +175,14 @@ export async function parseExpensesExcelFile(
   let headerRowIndex = 0;
   for (let i = 0; i < Math.min(5, rawData.length); i++) {
     const rowStr = rawData[i].map((c) => String(c).toLowerCase()).join(' ');
-    if (rowStr.includes('comercio') || rowStr.includes('monto') || rowStr.includes('fecha') || rowStr.includes('total')) {
+    if (
+      rowStr.includes('comercio') ||
+      rowStr.includes('monto') ||
+      rowStr.includes('fecha') ||
+      rowStr.includes('total') ||
+      rowStr.includes('razon social') ||
+      rowStr.includes('rut proveedor')
+    ) {
       headerRowIndex = i;
       break;
     }
@@ -147,6 +196,10 @@ export async function parseExpensesExcelFile(
     headerMap[norm] = colIdx;
   });
 
+  const isSiiRcv = Object.keys(headerMap).some(
+    (k) => k.includes('rutproveedor') || k.includes('razonsocial') || k.includes('montoivarecuperable')
+  );
+
   // Encontrar índices de columnas con variantes comunes
   const getCol = (patterns: string[]): number => {
     for (const pat of patterns) {
@@ -157,16 +210,18 @@ export async function parseExpensesExcelFile(
     return -1;
   };
 
-  const colDate = getCol(['fecha', 'date']);
-  const colMerchant = getCol(['comercio', 'proveedor', 'negocio', 'local', 'empresaemisor']);
-  const colRut = getCol(['rut', 'rutcomercio', 'rutemisor']);
-  const colDocNumber = getCol(['ndocumento', 'nboleta', 'nfactura', 'folio', 'documento', 'numero']);
+  const colDate = getCol(['fechadocto', 'fechadoc', 'fecha', 'date']);
+  const colMerchant = getCol(['razonsocial', 'comercio', 'proveedor', 'negocio', 'local', 'empresaemisor']);
+  const colRut = getCol(['rutproveedor', 'rut', 'rutcomercio', 'rutemisor']);
+  const colDocNumber = getCol(['folio', 'ndocumento', 'nboleta', 'nfactura', 'documento', 'numero']);
   const colDocType = getCol(['tipodocumento', 'tipodoc', 'documento']);
   const colExpenseType = getCol(['tipogasto', 'ambito', 'tipo', 'destino']);
-  const colCategory = getCol(['categoria', 'rubro']);
+  const colCategory = getCol(['categoria', 'rubro', 'tipocompra']);
   const colAmount = getCol(['montototal', 'monto', 'total', 'totalclp', 'valor']);
+  const colNet = getCol(['montoneto', 'neto']);
+  const colIva = getCol(['montoivarecuperable', 'ivarecuperable', 'iva', 'montoiva']);
   const colPayment = getCol(['mediopago', 'formapago', 'pago']);
-  const colNotes = getCol(['detalle', 'notas', 'observaciones', 'descripcion']);
+  const colNotes = getCol(['detalle', 'notas', 'observaciones', 'descripcion', 'tipocompra']);
 
   const rows: ParsedExpenseRow[] = [];
 
@@ -181,22 +236,24 @@ export async function parseExpensesExcelFile(
     const dateRaw = colDate !== -1 ? row[colDate] : null;
     const amountRaw = colAmount !== -1 ? row[colAmount] : 0;
     const amount = parseAmountCLP(amountRaw);
+    const netRaw = colNet !== -1 ? parseAmountCLP(row[colNet]) : undefined;
+    const ivaRaw = colIva !== -1 ? parseAmountCLP(row[colIva]) : undefined;
 
     if (!merchantRaw) {
       errors.push('Falta el nombre del comercio o proveedor.');
     }
 
-    if (amount <= 0) {
+    if (amount <= 0 && (!netRaw || netRaw <= 0)) {
       errors.push('El monto total debe ser un valor numérico mayor a 0 CLP.');
     }
 
     const date = parseExcelDate(dateRaw, fallbackMonth);
 
     // Tipo de gasto
-    let expenseType: ExpenseType = 'personal';
+    let expenseType: ExpenseType = isSiiRcv ? 'business' : 'personal';
     if (colExpenseType !== -1) {
       const et = String(row[colExpenseType] || '').toLowerCase().trim();
-      if (et.includes('empresa') || et.includes('negocio') || et.includes('business')) {
+      if (et.includes('empresa') || et.includes('negocio') || et.includes('business') || et.includes('giro')) {
         expenseType = 'business';
       } else if (et.includes('mixt') || et.includes('mix')) {
         expenseType = 'mixed';
@@ -206,7 +263,7 @@ export async function parseExpensesExcelFile(
     }
 
     // Tipo de documento
-    let documentType: DocumentType = 'boleta';
+    let documentType: DocumentType = isSiiRcv ? 'factura' : 'boleta';
     if (colDocType !== -1) {
       const dt = String(row[colDocType] || '').toLowerCase().trim();
       if (dt.includes('factura')) documentType = 'factura';
@@ -216,15 +273,20 @@ export async function parseExpensesExcelFile(
     }
 
     // Categoría
-    const categoryName = colCategory !== -1 && row[colCategory] ? String(row[colCategory]).trim() : 'Varios';
+    let categoryName = colCategory !== -1 && row[colCategory] ? String(row[colCategory]).trim() : (isSiiRcv ? 'Facturas de Compra (RCV)' : 'Varios');
+    if (isSiiRcv && categoryName === 'Del Giro') {
+      categoryName = 'Compras Operacionales (Del Giro)';
+    }
 
     // Medio de pago
-    const paymentMethod = colPayment !== -1 && row[colPayment] ? String(row[colPayment]).trim() : 'Débito';
+    const paymentMethod = colPayment !== -1 && row[colPayment] ? String(row[colPayment]).trim() : 'Transferencia';
 
     // Folio y RUT
     const receiptNumber = colDocNumber !== -1 && row[colDocNumber] ? String(row[colDocNumber]).trim() : undefined;
     const merchantRut = colRut !== -1 && row[colRut] ? String(row[colRut]).trim() : undefined;
     const notes = colNotes !== -1 && row[colNotes] ? String(row[colNotes]).trim() : undefined;
+
+    const effectiveAmount = amount > 0 ? amount : ((netRaw || 0) + (ivaRaw || 0));
 
     rows.push({
       rowNumber: r + 1,
@@ -235,7 +297,9 @@ export async function parseExpensesExcelFile(
       documentType,
       expenseType,
       categoryName,
-      totalAmount: amount,
+      totalAmount: effectiveAmount,
+      netAmount: netRaw,
+      taxAmount: ivaRaw,
       paymentMethod,
       notes,
       isValid: errors.length === 0,

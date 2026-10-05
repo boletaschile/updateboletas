@@ -40,6 +40,7 @@ import {
   ShieldCheck,
   Check,
   UploadCloud,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { MonthlyClosingChecklist } from '@/components/dashboard/monthly-closing-checklist';
 import { NewExpenseModal } from '@/components/receipts/new-expense-modal';
@@ -516,6 +517,24 @@ export default function DashboardPage() {
             </div>
 
             <div className="flex flex-wrap items-center gap-2.5">
+              <Link href="/cuentas-por-cobrar?import=sales">
+                <Button
+                  variant="outline"
+                  className="border-emerald-400/40 bg-emerald-950/40 text-emerald-200 hover:bg-emerald-900/60 gap-1.5 font-medium text-xs"
+                >
+                  <FileSpreadsheet className="h-4 w-4 text-emerald-400" />
+                  <span>Subir Facturas Venta (CSV)</span>
+                </Button>
+              </Link>
+              <Link href="/receipts/import-excel?type=sii_rcv">
+                <Button
+                  variant="outline"
+                  className="border-blue-400/30 bg-blue-950/40 text-blue-100 hover:bg-blue-900/60 gap-1.5 font-medium text-xs"
+                >
+                  <UploadCloud className="h-4 w-4 text-blue-300" />
+                  <span>Subir Facturas Compra (RCV)</span>
+                </Button>
+              </Link>
               <Link href="/cuentas-por-cobrar">
                 <Button
                   variant="outline"

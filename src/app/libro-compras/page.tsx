@@ -10,6 +10,7 @@ import { useAuth } from '@/lib/store/auth-context';
 import { formatCLP, formatDateCL } from '@/lib/utils';
 import { exportLibroComprasExcel, exportLibroComprasCSV, getSIIDocumentCode } from '@/lib/export-utils';
 import { monthKeyOf } from '@/lib/month-utils';
+import Link from 'next/link';
 import {
   BookOpen,
   FileSpreadsheet,
@@ -21,6 +22,7 @@ import {
   CheckCircle2,
   Filter,
   FileText,
+  UploadCloud,
 } from 'lucide-react';
 
 export default function LibroComprasPage() {
@@ -92,7 +94,16 @@ export default function LibroComprasPage() {
             </p>
           </div>
 
-          <div className="flex items-center gap-3 w-full md:w-auto justify-end flex-wrap">
+          <div className="flex items-center gap-2.5 w-full md:w-auto justify-end flex-wrap">
+            <Link href="/receipts/import-excel?type=sii_rcv">
+              <Button
+                size="sm"
+                className="bg-blue-600 hover:bg-blue-500 text-white gap-1.5 font-semibold text-xs shadow-md"
+              >
+                <UploadCloud className="h-4 w-4" />
+                <span>+ Subir Facturas de Compra (RCV)</span>
+              </Button>
+            </Link>
             <Button
               variant="outline"
               size="sm"
@@ -108,7 +119,7 @@ export default function LibroComprasPage() {
               className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 font-semibold text-xs shadow-md"
             >
               <FileSpreadsheet className="h-4 w-4" />
-              <span>Descargar Libro Excel Oficial (.xlsx)</span>
+              <span>Descargar Libro Excel (.xlsx)</span>
             </Button>
           </div>
         </div>

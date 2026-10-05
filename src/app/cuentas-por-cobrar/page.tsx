@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { AppLayout } from '@/components/layout/app-layout';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { useReceipts } from '@/lib/store/receipts-context';
 import { useAuth } from '@/lib/store/auth-context';
 import { NewReceivableModal } from '@/components/receivables/new-receivable-modal';
+import { ImportSalesModal } from '@/components/receivables/import-sales-modal';
 import { formatCLP, formatDateCL } from '@/lib/utils';
 import { exportReceivablesToExcel } from '@/lib/export-utils';
 import { AccountReceivable, ReceivableDocumentType } from '@/types';
@@ -46,8 +47,18 @@ export default function CuentasPorCobrarPage() {
   const { activeOrg, activeOrgId } = useAuth();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('import') === 'sales') {
+        setIsImportModalOpen(true);
+      }
+    }
+  }, []);
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterDocType, setFilterDocType] = useState<string>('all');
   const [filterScope, setFilterScope] = useState<string>('all');
@@ -237,6 +248,15 @@ export default function CuentasPorCobrarPage() {
             <Button
               variant="outline"
               size="sm"
+              onClick={() => setIsImportModalOpen(true)}
+              className="border-blue-500/40 bg-blue-950/40 hover:bg-blue-900/60 text-blue-200"
+            >
+              <UploadCloud className="w-4 h-4 mr-1.5 text-blue-400" />
+              Importar Facturas (CSV/Excel)
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => exportReceivablesToExcel(filteredReceivables, activeOrg)}
               className="border-slate-700 bg-slate-800/80 hover:bg-slate-700 text-slate-200"
             >
@@ -284,25 +304,33 @@ export default function CuentasPorCobrarPage() {
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-sm font-semibold text-white">
-                  ¿Tienes una Cotización aprobada o Factura por cobrar?
+                  ¿Tienes Facturas de Venta o Cotizaciones del Mes?
                 </h3>
                 <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-400 border-emerald-500/30">
-                  PDF o Foto
+                  CSV, Excel o PDF
                 </Badge>
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
-                Sube el PDF de la cotización o factura para respaldar el cobro, autocompletar montos con IA y programar alertas antes del vencimiento.
+                Carga el archivo mensual de facturación para sincronizar ventas, flujo de cobranza e IVA Débito, o sube PDFs individuales con IA.
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 w-full md:w-auto shrink-0">
+          <div className="flex flex-wrap items-center gap-2 w-full md:w-auto shrink-0">
+            <Button
+              onClick={() => setIsImportModalOpen(true)}
+              className="bg-blue-600 hover:bg-blue-500 text-white font-semibold w-full sm:w-auto shadow-md gap-1.5 text-xs"
+            >
+              <FileSpreadsheet className="w-4 h-4" />
+              Subir Facturas del Mes (CSV)
+            </Button>
             <Button
               onClick={() => fileInputRef.current?.click()}
-              className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold w-full md:w-auto shadow-md"
+              variant="outline"
+              className="border-emerald-500/40 bg-emerald-950/40 hover:bg-emerald-900/60 text-emerald-200 font-semibold w-full sm:w-auto shadow-md text-xs"
             >
-              <UploadCloud className="w-4 h-4 mr-1.5" />
-              Subir Documento (PDF)
+              <UploadCloud className="w-4 h-4 mr-1.5 text-emerald-400" />
+              Subir PDF
             </Button>
           </div>
         </div>
@@ -700,6 +728,12 @@ export default function CuentasPorCobrarPage() {
             setUploadFile(null);
           }}
           initialFile={uploadFile}
+        />
+
+        {/* Modal de Importación Masiva de Facturas de Venta */}
+        <ImportSalesModal
+          isOpen={isImportModalOpen}
+          onClose={() => setIsImportModalOpen(false)}
         />
       </div>
     </AppLayout>

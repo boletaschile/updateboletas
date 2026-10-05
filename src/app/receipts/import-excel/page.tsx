@@ -90,8 +90,8 @@ export default function ImportExcelPage() {
     let count = 0;
 
     for (const r of validRows) {
-      const netAmount = Math.round(r.totalAmount / 1.19);
-      const taxAmount = Math.round((r.totalAmount * 0.19) / 1.19);
+      const netAmount = r.netAmount !== undefined ? r.netAmount : Math.round(r.totalAmount / 1.19);
+      const taxAmount = r.taxAmount !== undefined ? r.taxAmount : Math.round((r.totalAmount * 0.19) / 1.19);
       const isBusiness = r.expenseType === 'business';
       const isPersonal = r.expenseType === 'personal';
 
@@ -153,10 +153,21 @@ export default function ImportExcelPage() {
     }, 1800);
   };
 
+const SAMPLE_SII_RCV = `Nro;Tipo Compra;RUT Proveedor;Razon Social;Folio;Fecha Docto;Fecha Recepcion;Fecha Acuse;Monto Exento;Monto Neto;Monto IVA Recuperable;Monto Iva No Recuperable;Codigo IVA No Rec.;Monto Total;Monto Neto Activo Fijo;IVA Activo Fijo;IVA uso Comun;Impto. Sin Derecho a Credito;IVA No Retenido;Tabacos Puros;Tabacos Cigarrillos;Tabacos Elaborados;NCE o NDE sobre Fact. de Compra;Codigo Otro Impuesto;Valor Otro Impuesto;Tasa Otro Impuesto
+1;Del Giro;76399932-7;Koywe Billing SpA;41538;31/08/2026;01/09/2026 09:19:46;;0;9860;1873;;;11733;;;;;0;;;;0;;;;
+2;Del Giro;78921690-8;WOM S.A.;18504315;16/09/2026;18/09/2026 05:03:06;;0;20963;3983;;;24946;;;;;0;;;;0;;;;
+3;Del Giro;90635000-9;Telefonica Chile S.A;55094424;19/09/2026;20/09/2026 18:41:59;;0;10087;1917;;;12004;;;;;0;;;;0;;;;`;
+
+  const handleLoadSiiSample = () => {
+    const blob = new Blob([SAMPLE_SII_RCV], { type: 'text/csv;charset=utf-8;' });
+    const sampleFile = new File([blob], 'RCV_Facturas_Compra_SII.csv', { type: 'text/csv' });
+    handleProcessFile(sampleFile);
+  };
+
   return (
     <AppLayout
-      title="Importación por Planilla Excel"
-      description="Carga tus gastos y boletas masivamente mediante una planilla Excel o CSV con validación instantánea."
+      title="Importación por Planilla Excel & RCV SII"
+      description="Carga tus facturas de compra y boletas masivamente mediante archivo RCV del SII, Excel o CSV con validación instantánea."
     >
       <div className="space-y-6 max-w-5xl mx-auto">
         {/* Cabecera de Navegación y Descarga de Plantilla */}
@@ -168,32 +179,46 @@ export default function ImportExcelPage() {
             </Button>
           </Link>
 
-          <Button
-            onClick={downloadExpensesTemplateExcel}
-            className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-md"
-          >
-            <Download className="h-4 w-4" />
-            <span>Descargar Plantilla Excel Oficial (.xlsx)</span>
-          </Button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleLoadSiiSample}
+              className="gap-1.5 text-xs border-blue-400 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/60"
+            >
+              <Sparkles className="h-3.5 w-3.5 text-blue-600" />
+              <span>Cargar Ejemplo RCV SII</span>
+            </Button>
+            <Button
+              onClick={downloadExpensesTemplateExcel}
+              className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-md"
+            >
+              <Download className="h-4 w-4" />
+              <span>Descargar Plantilla Excel Oficial (.xlsx)</span>
+            </Button>
+          </div>
         </div>
 
         {/* Banner Explicativo */}
         <div className="p-6 rounded-2xl bg-gradient-to-r from-emerald-950 via-teal-950 to-slate-900 text-white flex flex-col md:flex-row items-start md:items-center justify-between gap-5 border border-emerald-800/40 shadow-lg">
           <div className="space-y-1.5">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <Badge className="bg-emerald-500/20 text-emerald-200 border-emerald-400/30 text-xs">
                 Importador Masivo
               </Badge>
               <Badge className="bg-blue-500/20 text-blue-200 border-blue-400/30 text-xs">
                 Formatos .xlsx, .xls y .csv
               </Badge>
+              <Badge className="bg-amber-500/20 text-amber-200 border-amber-400/30 text-xs">
+                🇨🇱 Registro RCV oficial del SII
+              </Badge>
             </div>
             <h2 className="text-xl md:text-2xl font-bold tracking-tight flex items-center gap-2">
               <FileSpreadsheet className="h-6 w-6 text-emerald-400" />
-              <span>Sube tus gastos en segundos con una Planilla</span>
+              <span>Sube tus Facturas de Compra o Boletas en segundos</span>
             </h2>
             <p className="text-xs text-emerald-100/80 max-w-2xl leading-relaxed">
-              Descarga nuestra plantilla oficial prediseñada, completa tus compras del mes con columnas estándar (Fecha, Comercio, RUT, Monto, Categoría) y súbela aquí. El sistema validará automáticamente los montos en CLP y los asignará a tu contabilidad.
+              Compatible con el archivo descargado directamente del <strong>Registro de Compras RCV del SII de Chile</strong> (separado por punto y coma o coma) o con nuestra plantilla Excel oficial. Las facturas se registrarán con su Folio, Razón Social, RUT, Neto e IVA Crédito Fiscal.
             </p>
           </div>
         </div>

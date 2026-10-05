@@ -52,7 +52,7 @@ interface ReceiptsContextType {
   unmarkDebtAsPaid: (id: string) => void;
   deleteDebt: (id: string) => void;
   updateDebt: (id: string, fields: Partial<AccountPayable>) => void;
-  addReceivable: (newRec: Omit<AccountReceivable, 'id' | 'created_at' | 'updated_at' | 'status'>) => AccountReceivable;
+  addReceivable: (newRec: Omit<AccountReceivable, 'id' | 'user_id' | 'created_at' | 'updated_at' | 'status'> & { user_id?: string; status?: ReceivableStatus }) => AccountReceivable;
   markReceivableAsCollected: (id: string, paymentMethod?: string) => void;
   unmarkReceivableAsCollected: (id: string) => void;
   deleteReceivable: (id: string) => void;
@@ -601,14 +601,14 @@ export function ReceiptsProvider({ children }: { children: React.ReactNode }) {
   };
 
   // Métodos de Cuentas por Cobrar y Facturas de Venta
-  const addReceivable = (newRec: Omit<AccountReceivable, 'id' | 'created_at' | 'updated_at' | 'status'>) => {
+  const addReceivable = (newRec: Omit<AccountReceivable, 'id' | 'user_id' | 'created_at' | 'updated_at' | 'status'> & { user_id?: string; status?: ReceivableStatus }) => {
     const recId = ensureUUID();
-    const status = computeReceivableStatus(newRec.due_date, false);
+    const status = newRec.status || computeReceivableStatus(newRec.due_date, !!newRec.collected_at);
 
     const created: AccountReceivable = {
       ...newRec,
       id: recId,
-      user_id: currentUserId,
+      user_id: newRec.user_id || currentUserId,
       status,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
