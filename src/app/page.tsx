@@ -882,7 +882,9 @@ export default function DashboardPage() {
                   </div>
                   <div className="mt-2 pt-2 border-t border-border flex items-center justify-between text-[10px]">
                     <span className="text-blue-600 font-medium">Liquidez en Caja</span>
-                    <span className="text-muted-foreground">Flujo neto</span>
+                    <Link href="/flujo-de-caja" className="text-blue-600 hover:underline flex-shrink-0 font-medium">
+                      Ver Flujo →
+                    </Link>
                   </div>
                 </Card>
 
@@ -930,7 +932,7 @@ export default function DashboardPage() {
                     </div>
                   </div>
                   <div className="mt-2">
-                    <h4 className="text-xl font-extrabold text-amber-600 dark:text-amber-400">
+                    <h4 className="text-xl font-extrabold text-amber-700 dark:text-amber-400">
                       {formatCLP(estimatedF29IvaToPay)}
                     </h4>
                     <p className="text-[10px] text-muted-foreground mt-1 truncate">
@@ -946,6 +948,140 @@ export default function DashboardPage() {
                 </Card>
               </div>
             </div>
+
+            {/* WIDGET INTERACTIVO: FLUJO DE CAJA & SEMÁFORO DE LIQUIDEZ SEMANAL */}
+            <Card className="overflow-hidden shadow-sm border">
+              <CardHeader className="py-3.5 px-4 bg-muted/40 border-b flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <div className="h-7 w-7 rounded-lg bg-emerald-600/10 text-emerald-600 flex items-center justify-center">
+                    <Wallet className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-sm font-bold flex items-center gap-2">
+                      <span>Flujo de Caja Operacional & Semáforo de Liquidez</span>
+                      <Badge
+                        variant="outline"
+                        className={`text-[10px] ${
+                          operationalCashFlow >= 0
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300'
+                            : 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300'
+                        }`}
+                      >
+                        {operationalCashFlow >= 0 ? '🟢 Liquidez Positiva' : '🔴 Déficit Operativo'}
+                      </Badge>
+                    </CardTitle>
+                    <CardDescription className="text-[11px] text-muted-foreground">
+                      Cotejo de ingresos cobrados vs compromisos por vencer (Previred día 13, IVA F29 día 20 y fin de mes)
+                    </CardDescription>
+                  </div>
+                </div>
+
+                <Link href="/flujo-de-caja">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 text-xs gap-1.5 font-medium border-emerald-500/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50"
+                  >
+                    <span>Ver Flujo de Caja Completo</span>
+                    <ArrowUpRight className="h-3.5 w-3.5" />
+                  </Button>
+                </Link>
+              </CardHeader>
+
+              <CardContent className="p-4 space-y-4">
+                {/* 3 Métricas Rápidas */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                  <div className="p-3 rounded-xl bg-emerald-50/20 dark:bg-emerald-950/20 border border-emerald-200/50 dark:border-emerald-800/40">
+                    <span className="text-[11px] text-emerald-800 dark:text-emerald-400 font-semibold block">
+                      + Cobranzas Percibidas
+                    </span>
+                    <span className="text-lg font-black font-mono text-emerald-600 dark:text-emerald-400 block mt-0.5">
+                      {formatCLP(collectedCash)}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground">
+                      Por cobrar: {formatCLP(totalPendingReceivable)}
+                    </span>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-rose-50/20 dark:bg-rose-950/20 border border-rose-200/50 dark:border-rose-800/40">
+                    <span className="text-[11px] text-rose-800 dark:text-rose-400 font-semibold block">
+                      - Egresos y Compromisos
+                    </span>
+                    <span className="text-lg font-black font-mono text-rose-600 dark:text-rose-400 block mt-0.5">
+                      {formatCLP(totalSpent)}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground">
+                      Urgente por pagar: {formatCLP(totalUrgentDebt)}
+                    </span>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-muted/40 border border-border">
+                    <span className="text-[11px] text-muted-foreground font-semibold block">
+                      = Flujo Neto Operacional
+                    </span>
+                    <span
+                      className={`text-lg font-black font-mono block mt-0.5 ${
+                        operationalCashFlow >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
+                      }`}
+                    >
+                      {operationalCashFlow >= 0 ? '+' : ''}
+                      {formatCLP(operationalCashFlow)}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground">
+                      {operationalCashFlow >= 0 ? 'Superávit operacional' : 'Atención: Salidas superan ingresos'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Línea de tiempo de las 4 Semanas del Mes */}
+                <div className="pt-2 border-t border-border">
+                  <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider block mb-2.5">
+                    Cronograma de Vencimientos y Fechas Críticas del Mes:
+                  </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 text-xs">
+                    <div className="p-2.5 rounded-lg border border-border bg-card">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-foreground text-[11px]">Semana 1 (Días 1-7)</span>
+                        <Badge variant="outline" className="text-[9px]">Inicio</Badge>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground mt-1">
+                        Suministros, licencias y servicios operativos recurrentes.
+                      </p>
+                    </div>
+
+                    <div className="p-2.5 rounded-lg border border-amber-300 dark:border-amber-800 bg-amber-50/20 dark:bg-amber-950/20">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-amber-900 dark:text-amber-200 text-[11px]">Semana 2 (Días 8-14)</span>
+                        <Badge className="bg-amber-100 text-amber-800 border-amber-300 text-[9px]">Día 13</Badge>
+                      </div>
+                      <p className="text-[10px] text-amber-800 dark:text-amber-300 mt-1 font-medium">
+                        ⚠️ Cotizaciones Previred. Pago previsional de personal.
+                      </p>
+                    </div>
+
+                    <div className="p-2.5 rounded-lg border border-blue-300 dark:border-blue-800 bg-blue-50/20 dark:bg-blue-950/20">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-blue-900 dark:text-blue-200 text-[11px]">Semana 3 (Días 15-21)</span>
+                        <Badge className="bg-blue-100 text-blue-800 border-blue-300 text-[9px]">Día 20</Badge>
+                      </div>
+                      <p className="text-[10px] text-blue-800 dark:text-blue-300 mt-1 font-medium">
+                        ⚠️ Declaración y Pago F29 IVA ({formatCLP(estimatedF29IvaToPay)} est.).
+                      </p>
+                    </div>
+
+                    <div className="p-2.5 rounded-lg border border-purple-300 dark:border-purple-800 bg-purple-50/20 dark:bg-purple-950/20">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-purple-900 dark:text-purple-200 text-[11px]">Semana 4 (Días 22-31)</span>
+                        <Badge className="bg-purple-100 text-purple-800 border-purple-300 text-[9px]">Fin de Mes</Badge>
+                      </div>
+                      <p className="text-[10px] text-purple-800 dark:text-purple-300 mt-1 font-medium">
+                        💼 Sueldo asignado dueño ({formatCLP(assignedSalary)}), arriendos y cierre.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
 
             {/* Checklist de Cierre Financiero Mensual */}
             <MonthlyClosingChecklist currentMonthKey={selectedMonth} />

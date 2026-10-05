@@ -622,3 +622,111 @@ export function exportLibroVentasCSV(
   link.click();
   document.body.removeChild(link);
 }
+
+export interface CashFlowExportData {
+  initialBalance: number;
+  totalInflows: number;
+  totalOutflows: number;
+  netCashFlow: number;
+  finalProjectedBalance: number;
+  inflows: Array<{
+    date: string;
+    concept: string;
+    client: string;
+    amount: number;
+    status: string;
+  }>;
+  outflows: Array<{
+    date: string;
+    concept: string;
+    supplier: string;
+    category: string;
+    amount: number;
+    status: string;
+  }>;
+  weeklySummary: Array<{
+    week: string;
+    period: string;
+    inflows: number;
+    outflows: number;
+    net: number;
+    balance: number;
+  }>;
+}
+
+/**
+ * Exporta el Flujo de Caja de la Empresa a Excel multi-hoja
+ */
+export function exportCashFlowToExcel(
+  data: CashFlowExportData,
+  company?: Organization | null,
+  periodMonth: number = new Date().getMonth() + 1,
+  periodYear: number = new Date().getFullYear()
+) {
+  const monthNames = [
+    'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+  ];
+  const periodText = `${monthNames[periodMonth - 1]} ${periodYear}`;
+
+  const summary = [
+    { 'Concepto': 'Empresa / Razón Social', 'Valor': company?.name || 'Mi Empresa' },
+    { 'Concepto': 'RUT Empresa', 'Valor': company?.rut || '-' },
+    { 'Concepto': 'Período', 'Valor': periodText },
+    { 'Concepto': 'Fecha Emisión Reporte', 'Valor': formatDateCL(new Date()) },
+    { 'Concepto': 'Saldo Inicial de Caja (Cuenta Bancaria)', 'Valor': data.initialBalance },
+    { 'Concepto': 'Total Entradas de Dinero (Cobranzas)', 'Valor': data.totalInflows },
+    { 'Concepto': 'Total Salidas de Dinero (Gastos y Compromisos)', 'Valor': data.totalOutflows },
+    { 'Concepto': 'Flujo Operacional Neto', 'Valor': data.netCashFlow },
+    { 'Concepto': 'Saldo Final Proyectado de Caja', 'Valor': data.finalProjectedBalance },
+    {
+      'Concepto': 'Diagnóstico de Liquidez',
+      'Valor':
+        data.finalProjectedBalance > 0
+          ? 'Posición de Caja Positiva y Saludable'
+          : 'Alerta de Déficit de Caja / Requiere Financiamiento',
+    },
+  ];
+
+  const inflowsRows = data.inflows.map((item, idx) => ({
+    'N°': idx + 1,
+    'Fecha': formatDateCL(item.date),
+    'Glosa / Concepto': item.concept,
+    'Cliente / Pagador': item.client,
+    'Monto Entrada (CLP)': item.amount,
+    'Estado': item.status,
+  }));
+
+  const outflowsRows = data.outflows.map((item, idx) => ({
+    'N°': idx + 1,
+    'Fecha': formatDateCL(item.date),
+    'Glosa / Concepto': item.concept,
+    'Proveedor / Destino': item.supplier,
+    'Categoría': item.category,
+    'Monto Salida (CLP)': item.amount,
+    'Estado': item.status,
+  }));
+
+  const weeklyRows = data.weeklySummary.map((item) => ({
+    'Semana': item.week,
+    'Rango de Fechas': item.period,
+    'Entradas Proyectadas (CLP)': item.inflows,
+    'Salidas Proyectadas (CLP)': item.outflows,
+    'Flujo Neto Semanal (CLP)': item.net,
+    'Saldo Acumulado en Caja (CLP)': item.balance,
+  }));
+
+  const wb = XLSX.utils.book_new();
+  const wsSummary = XLSX.utils.json_to_sheet(summary);
+  const wsWeekly = XLSX.utils.json_to_sheet(weeklyRows);
+  const wsInflows = XLSX.utils.json_to_sheet(inflowsRows);
+  const wsOutflows = XLSX.utils.json_to_sheet(outflowsRows);
+
+  XLSX.utils.book_append_sheet(wb, wsSummary, 'Resumen Posición Caja');
+  XLSX.utils.book_append_sheet(wb, wsWeekly, 'Flujo Semanal');
+  XLSX.utils.book_append_sheet(wb, wsInflows, 'Entradas de Dinero');
+  XLSX.utils.book_append_sheet(wb, wsOutflows, 'Salidas de Dinero');
+
+  const fileName = `Flujo_de_Caja_${company?.name?.replace(/\s+/g, '_') || 'Empresa'}_${periodYear}_${String(periodMonth).padStart(2, '0')}.xlsx`;
+  XLSX.writeFile(wb, fileName);
+}
