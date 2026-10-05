@@ -43,6 +43,16 @@ export interface MonthlyFixedExpenses {
   other_fixed?: number; // Otros gastos fijos mensuales
 }
 
+export interface EmployeeSalaryItem {
+  id: string;
+  name: string;
+  role: string;
+  amount: number;
+  payment_day?: number;
+  contract_type?: 'indefinido' | 'plazo_fijo' | 'honorarios' | 'patronal';
+  rut?: string;
+}
+
 export interface Organization {
   id: string;
   name: string;
@@ -59,6 +69,7 @@ export interface Organization {
 
   // Sueldo Asignado y Gastos Mensuales
   assigned_salary?: number | null;
+  team_salaries?: EmployeeSalaryItem[] | null;
   monthly_expenses?: MonthlyFixedExpenses | null;
 }
 

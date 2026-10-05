@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Profile, Organization, OrganizationMember, UserRole, MonthlyFixedExpenses } from '@/types';
+import { Profile, Organization, OrganizationMember, UserRole, MonthlyFixedExpenses, EmployeeSalaryItem } from '@/types';
 import { getSupabaseBrowserClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import { ensureUUID } from '@/lib/supabase/db-service';
 
@@ -29,6 +29,7 @@ interface AuthContextType {
     legal_name?: string;
     type: 'business' | 'personal';
     assigned_salary?: number | null;
+    team_salaries?: EmployeeSalaryItem[] | null;
     monthly_expenses?: MonthlyFixedExpenses | null;
   }) => Organization;
   updateOrganization: (
@@ -39,6 +40,7 @@ interface AuthContextType {
       legal_name?: string | null;
       type?: 'business' | 'personal';
       assigned_salary?: number | null;
+      team_salaries?: EmployeeSalaryItem[] | null;
       monthly_expenses?: MonthlyFixedExpenses | null;
     }
   ) => void;
@@ -330,6 +332,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       legal_name?: string | null;
       type?: 'business' | 'personal';
       assigned_salary?: number | null;
+      team_salaries?: EmployeeSalaryItem[] | null;
       monthly_expenses?: MonthlyFixedExpenses | null;
     }
   ) => {
@@ -346,6 +349,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               : org.legal_name,
           type: data.type || org.type,
           assigned_salary: data.assigned_salary !== undefined ? data.assigned_salary : org.assigned_salary,
+          team_salaries: data.team_salaries !== undefined ? data.team_salaries : org.team_salaries,
           monthly_expenses: data.monthly_expenses !== undefined ? data.monthly_expenses : org.monthly_expenses,
           updated_at: new Date().toISOString(),
         };

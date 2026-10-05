@@ -44,6 +44,7 @@ import {
 } from 'lucide-react';
 import { MonthlyClosingChecklist } from '@/components/dashboard/monthly-closing-checklist';
 import { NewExpenseModal } from '@/components/receipts/new-expense-modal';
+import { AssignSalaryModal } from '@/components/payroll/assign-salary-modal';
 import {
   BarChart,
   Bar,
@@ -64,6 +65,7 @@ export default function DashboardPage() {
   const { receipts, budgets, debts, receivables } = useReceipts();
   const { activeOrgId, activeOrg, organizations, setActiveOrgId, user } = useAuth();
   const [isAddExpenseOpen, setIsAddExpenseOpen] = useState(false);
+  const [isAssignSalaryModalOpen, setIsAssignSalaryModalOpen] = useState(false);
 
   const businessOrgs = useMemo(() => organizations.filter((o) => o.type !== 'personal'), [organizations]);
   const personalOrgs = useMemo(() => organizations.filter((o) => o.type === 'personal'), [organizations]);
@@ -553,6 +555,14 @@ export default function DashboardPage() {
                   <span>Libro de Compras</span>
                 </Button>
               </Link>
+              <Button
+                variant="outline"
+                onClick={() => setIsAssignSalaryModalOpen(true)}
+                className="border-amber-400/40 bg-amber-950/40 text-amber-200 hover:bg-amber-900/60 gap-1.5 font-medium text-xs"
+              >
+                <Briefcase className="h-4 w-4 text-amber-400" />
+                <span>Asignar Sueldos</span>
+              </Button>
               <Button
                 onClick={() => setIsAddExpenseOpen(true)}
                 className="bg-white text-slate-950 hover:bg-slate-100 gap-2 font-semibold shadow-md text-xs"
@@ -1566,6 +1576,11 @@ export default function DashboardPage() {
         isOpen={isAddExpenseOpen}
         onClose={() => setIsAddExpenseOpen(false)}
         defaultExpenseType={isPersonalMode ? 'personal' : 'business'}
+      />
+
+      <AssignSalaryModal
+        isOpen={isAssignSalaryModalOpen}
+        onClose={() => setIsAssignSalaryModalOpen(false)}
       />
     </AppLayout>
   );

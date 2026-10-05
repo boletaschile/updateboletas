@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/lib/store/auth-context';
 import { NewOrganizationModal } from '@/components/organizations/new-organization-modal';
 import { EditOrganizationModal } from '@/components/organizations/edit-organization-modal';
+import { AssignSalaryModal } from '@/components/payroll/assign-salary-modal';
 import { formatCLP } from '@/lib/utils';
 import { UserRole, Organization } from '@/types';
 import {
@@ -30,6 +31,7 @@ export default function OrganizationsManagementPage() {
   const { organizations, members, inviteMember, removeMember, activeOrgId, setActiveOrgId } = useAuth();
   const [isNewOrgModalOpen, setIsNewOrgModalOpen] = useState(false);
   const [editingOrg, setEditingOrg] = useState<Organization | null>(null);
+  const [salaryModalOrgId, setSalaryModalOrgId] = useState<string | null>(null);
 
   // Estados para invitar miembro
   const [selectedOrgIdForInvite, setSelectedOrgIdForInvite] = useState<string>(
@@ -153,6 +155,18 @@ export default function OrganizationsManagementPage() {
                         </span>
                       </div>
 
+                      {org.team_salaries && org.team_salaries.length > 0 && (
+                        <div className="flex items-center justify-between text-[11px] pt-1.5 border-t border-border/60">
+                          <span className="font-semibold text-muted-foreground flex items-center gap-1">
+                            <Users className="h-3 w-3 text-emerald-600" />
+                            <span>Nómina Equipo ({org.team_salaries.length}):</span>
+                          </span>
+                          <span className="font-bold text-emerald-700 dark:text-emerald-300">
+                            {formatCLP(org.team_salaries.reduce((sum, item) => sum + (item.amount || 0), 0))}
+                          </span>
+                        </div>
+                      )}
+
                       {org.monthly_expenses && (
                         <div className="pt-1.5 border-t border-border/60 text-[10px] text-muted-foreground space-y-1">
                           <span className="font-semibold uppercase tracking-wider block text-[9px] text-muted-foreground">
@@ -193,6 +207,18 @@ export default function OrganizationsManagementPage() {
                         </div>
                       )}
                     </div>
+                  )}
+
+                  {org.type === 'business' && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setSalaryModalOrgId(org.id)}
+                      className="w-full text-xs gap-1.5 border-emerald-500/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+                    >
+                      <Briefcase className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                      <span>Gestionar Sueldos & Nómina</span>
+                    </Button>
                   )}
 
                   <div>
@@ -327,6 +353,12 @@ export default function OrganizationsManagementPage() {
         isOpen={!!editingOrg}
         onClose={() => setEditingOrg(null)}
         organization={editingOrg}
+      />
+
+      <AssignSalaryModal
+        isOpen={Boolean(salaryModalOrgId)}
+        onClose={() => setSalaryModalOrgId(null)}
+        targetOrgId={salaryModalOrgId || undefined}
       />
     </AppLayout>
   );

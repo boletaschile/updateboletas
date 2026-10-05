@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { useReceipts } from '@/lib/store/receipts-context';
 import { useAuth } from '@/lib/store/auth-context';
 import { NewDebtModal } from '@/components/debts/new-debt-modal';
+import { AssignSalaryModal } from '@/components/payroll/assign-salary-modal';
 import { formatCLP, formatDateCL } from '@/lib/utils';
 import { exportDebtsToExcel } from '@/lib/export-utils';
 import { AccountPayable } from '@/types';
@@ -37,6 +38,7 @@ export default function CuentasPorPagarPage() {
   const { activeOrg, activeOrgId } = useAuth();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isAssignSalaryModalOpen, setIsAssignSalaryModalOpen] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterType, setFilterType] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
@@ -325,16 +327,28 @@ export default function CuentasPorPagarPage() {
 
           <div className="flex items-center gap-2 w-full md:w-auto justify-end flex-wrap">
             {activeOrg?.type === 'business' && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleLoadFixedExpenses}
-                className="bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-100 border-indigo-400/40 gap-1.5 text-xs font-semibold"
-                title="Cargar sueldo asignado y gastos fijos configurados para esta empresa"
-              >
-                <Briefcase className="h-4 w-4 text-emerald-400" />
-                <span>Cargar Gastos Fijos & Sueldo</span>
-              </Button>
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsAssignSalaryModalOpen(true)}
+                  className="bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-100 border-emerald-400/40 gap-1.5 text-xs font-semibold"
+                  title="Configurar y asignar sueldo del dueño y colaboradores"
+                >
+                  <Briefcase className="h-4 w-4 text-emerald-300" />
+                  <span>Asignar Sueldos</span>
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleLoadFixedExpenses}
+                  className="bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-100 border-indigo-400/40 gap-1.5 text-xs font-semibold"
+                  title="Cargar sueldo asignado y gastos fijos configurados para esta empresa"
+                >
+                  <Sparkles className="h-4 w-4 text-indigo-300" />
+                  <span>Cargar Gastos Fijos</span>
+                </Button>
+              </>
             )}
             <Button
               variant="outline"
@@ -731,6 +745,10 @@ export default function CuentasPorPagarPage() {
       </div>
 
       <NewDebtModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+      <AssignSalaryModal
+        isOpen={isAssignSalaryModalOpen}
+        onClose={() => setIsAssignSalaryModalOpen(false)}
+      />
     </AppLayout>
   );
 }

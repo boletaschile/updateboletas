@@ -11,6 +11,7 @@ import { useAuth } from '@/lib/store/auth-context';
 import { formatCLP, formatDateCL } from '@/lib/utils';
 import { monthKeyOf } from '@/lib/month-utils';
 import { exportCashFlowToExcel, CashFlowExportData } from '@/lib/export-utils';
+import { AssignSalaryModal } from '@/components/payroll/assign-salary-modal';
 import Link from 'next/link';
 import {
   Wallet,
@@ -39,6 +40,7 @@ export default function FlujoDeCajaPage() {
   const { receipts, receivables, debts } = useReceipts();
   const { activeOrg, activeOrgId } = useAuth();
 
+  const [isAssignSalaryModalOpen, setIsAssignSalaryModalOpen] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [activeTab, setActiveTab] = useState<'all' | 'inflows' | 'outflows'>('all');
@@ -366,6 +368,17 @@ export default function FlujoDeCajaPage() {
           </div>
 
           <div className="flex items-center gap-2.5 w-full md:w-auto justify-end flex-wrap">
+            {!isPersonalMode && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsAssignSalaryModalOpen(true)}
+                className="bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border-amber-400/30 gap-1.5 text-xs font-medium"
+              >
+                <Briefcase className="h-4 w-4 text-amber-400" />
+                <span>Asignar Sueldos</span>
+              </Button>
+            )}
             <Button
               size="sm"
               onClick={handleExportExcel}
@@ -800,6 +813,11 @@ export default function FlujoDeCajaPage() {
           </div>
         </Card>
       </div>
+
+      <AssignSalaryModal
+        isOpen={isAssignSalaryModalOpen}
+        onClose={() => setIsAssignSalaryModalOpen(false)}
+      />
     </AppLayout>
   );
 }
