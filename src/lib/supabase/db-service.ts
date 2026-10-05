@@ -388,3 +388,61 @@ export async function dbDeleteReceivable(id: string): Promise<boolean> {
     return false;
   }
 }
+
+/**
+ * Elimina todas las boletas, deudas, cobros y presupuestos del usuario en la base de datos Supabase
+ */
+export async function dbClearAllUserData(): Promise<boolean> {
+  if (!isSupabaseConfigured()) return true;
+  try {
+    const supabase = getSupabaseBrowserClient();
+    const userId = await getAuthUserId();
+    if (!userId) return false;
+
+    // 1. Borrar boletas y facturas (la cascada en PostgreSQL borra expense_items)
+    try {
+      await supabase.from('expense_documents').delete().eq('user_id', userId);
+      await supabase.from('expense_documents').delete().not('id', 'is', null);
+    } catch (e) {
+      console.warn('Error clearing expense_documents:', e);
+    }
+
+    // 2. Borrar cuentas por pagar
+    try {
+      await supabase.from('account_payables').delete().eq('user_id', userId);
+      await supabase.from('account_payables').delete().not('id', 'is', null);
+    } catch (e) {
+      console.warn('Error clearing account_payables:', e);
+    }
+
+    // 3. Borrar cuentas por cobrar
+    try {
+      await supabase.from('accounts_receivable').delete().eq('user_id', userId);
+      await supabase.from('accounts_receivable').delete().not('id', 'is', null);
+    } catch (e) {
+      console.warn('Error clearing accounts_receivable:', e);
+    }
+
+    // 4. Borrar presupuestos
+    try {
+      await supabase.from('monthly_budgets').delete().eq('user_id', userId);
+      await supabase.from('monthly_budgets').delete().not('id', 'is', null);
+    } catch (e) {
+      console.warn('Error clearing monthly_budgets:', e);
+    }
+
+    // 5. Borrar transacciones bancarias
+    try {
+      await supabase.from('bank_transactions').delete().eq('user_id', userId);
+      await supabase.from('bank_transactions').delete().not('id', 'is', null);
+    } catch (e) {
+      // Ignorar si la tabla no existe en la base de datos
+    }
+
+    return true;
+  } catch (err) {
+    console.warn('dbClearAllUserData error:', err);
+    return false;
+  }
+}
+

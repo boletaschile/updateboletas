@@ -12,11 +12,24 @@ import { Settings, RefreshCw, ShieldCheck, Database, Sliders, Building2 } from '
 
 export default function SettingsPage() {
   const { resetToDemo, clearAllData, receipts, debts } = useReceipts();
+  const [isClearing, setIsClearing] = React.useState(false);
 
-  const handleClear = () => {
-    if (confirm('¿Estás seguro de que deseas vaciar todas las boletas y deudas de prueba? El sistema quedará en blanco para que comiences a registrar tus documentos reales.')) {
-      clearAllData();
-      alert('¡Listo! Todos los datos demo han sido eliminados. Ya puedes comenzar a subir tus boletas reales.');
+  const handleClear = async () => {
+    if (
+      confirm(
+        '¿Estás seguro de que deseas vaciar todas las boletas y compromisos registrados? Se eliminarán permanentemente tanto de la base de datos en la nube (Supabase) como de este navegador para empezar desde cero.'
+      )
+    ) {
+      setIsClearing(true);
+      try {
+        await clearAllData();
+        alert('¡Listo! Todos los datos han sido eliminados de la base de datos y de este navegador.');
+      } catch (err) {
+        console.error('Error al vaciar datos:', err);
+        alert('Se limpiaron los datos locales. Si tienes conexión a Supabase, revisa tus credenciales.');
+      } finally {
+        setIsClearing(false);
+      }
     }
   };
 
@@ -34,24 +47,25 @@ export default function SettingsPage() {
               <span>Comenzar a Trabajar / Limpiar Datos Demo</span>
             </CardTitle>
             <CardDescription className="text-xs">
-              Actualmente tienes {receipts.length} boletas y {debts.length} compromisos registrados en tu navegador.
+              Actualmente tienes {receipts.length} boletas y {debts.length} compromisos registrados en tu cuenta y navegador.
             </CardDescription>
           </CardHeader>
           <CardContent className="p-5 space-y-4">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 rounded-xl bg-background border">
               <div className="space-y-1">
-                <p className="text-xs font-bold text-foreground">Vaciar Almacenamiento Local</p>
+                <p className="text-xs font-bold text-foreground">Vaciar Base de Datos y Almacenamiento</p>
                 <p className="text-[11px] text-muted-foreground max-w-lg">
-                  Limpia todas las boletas y deudas registradas localmente en este navegador. Mantiene tus categorías oficiales para que puedas registrar tus gastos reales.
+                  Elimina permanentemente todas las boletas, deudas y compromisos registrados en la base de datos en la nube y en este navegador. Mantiene tus categorías oficiales para que puedas registrar tus gastos reales.
                 </p>
               </div>
               <Button
                 variant="destructive"
                 size="sm"
                 onClick={handleClear}
+                disabled={isClearing}
                 className="gap-1.5 text-xs whitespace-nowrap shadow-sm"
               >
-                <span>Vaciar Datos y Empezar de Cero</span>
+                <span>{isClearing ? 'Vaciando Base de Datos...' : 'Vaciar Datos y Empezar de Cero'}</span>
               </Button>
             </div>
           </CardContent>

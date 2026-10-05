@@ -28,6 +28,7 @@ import {
   dbInsertReceivable,
   dbUpdateReceivable,
   dbDeleteReceivable,
+  dbClearAllUserData,
 } from '@/lib/supabase/db-service';
 
 interface ReceiptsContextType {
@@ -57,7 +58,7 @@ interface ReceiptsContextType {
   deleteReceivable: (id: string) => void;
   updateReceivable: (id: string, fields: Partial<AccountReceivable>) => void;
   resetToDemo: () => void;
-  clearAllData: () => void;
+  clearAllData: () => Promise<boolean>;
 }
 
 const ReceiptsContext = createContext<ReceiptsContextType | undefined>(undefined);
@@ -67,6 +68,7 @@ const STORAGE_KEY_CATEGORIES = 'subeboletas_categories_v1';
 const STORAGE_KEY_BUDGETS = 'subeboletas_budgets_v1';
 const STORAGE_KEY_DEBTS = 'subeboletas_debts_v1';
 const STORAGE_KEY_RECEIVABLES = 'subeboletas_receivables_v1';
+const SYNC_FLAG = 'subeboletas_cloud_synced_v1';
 
 // Firmas de datos demo para filtrado y purga automática en clientes móviles/antiguos
 const DEMO_RECEIPT_PREFIX = 'doc-demo-';
@@ -213,7 +215,6 @@ export function ReceiptsProvider({ children }: { children: React.ReactNode }) {
       // Sincronizar con Supabase (fuente de verdad cuando hay sesión real).
       // La primera vez en cada dispositivo, sube lo que solo existe localmente;
       // después, el estado es exactamente lo que hay en la base de datos.
-      const SYNC_FLAG = 'subeboletas_cloud_synced_v1';
       const alreadySynced = localStorage.getItem(SYNC_FLAG) === '1';
 
       const syncCollection = async <T extends { id: string }>(
@@ -675,7 +676,7 @@ export function ReceiptsProvider({ children }: { children: React.ReactNode }) {
     clearAllData();
   };
 
-  const clearAllData = () => {
+  const clearAllData = async (): Promise<boolean> => {
     setReceipts([]);
     setDebts([]);
     setReceivables([]);
@@ -685,6 +686,11 @@ export function ReceiptsProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem(STORAGE_KEY_DEBTS, JSON.stringify([]));
     localStorage.setItem(STORAGE_KEY_RECEIVABLES, JSON.stringify([]));
     localStorage.setItem(STORAGE_KEY_BUDGETS, JSON.stringify([]));
+    localStorage.setItem(STORAGE_KEY_CATEGORIES, JSON.stringify(INITIAL_CATEGORIES));
+    localStorage.setItem(SYNC_FLAG, '1');
+
+    const ok = await dbClearAllUserData();
+    return ok;
   };
 
   return (
