@@ -92,10 +92,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (savedMembers) setMembers(JSON.parse(savedMembers));
 
-      // Sincronizar usuario activo de Supabase si está disponible
+      // Sincronizar usuario activo y organizaciones de Supabase (controlado por login)
       if (isSupabaseConfigured()) {
         const supabase = getSupabaseBrowserClient();
-        supabase.auth.getUser().then(({ data: { user: supaUser } }) => {
+        supabase.auth.getUser().then(async ({ data: { user: supaUser } }) => {
           if (supaUser) {
             const userProfile: Profile = {
               id: supaUser.id,
@@ -108,6 +108,65 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               updated_at: supaUser.updated_at || supaUser.created_at,
             };
             setUser(userProfile);
+
+            // Cargar organizaciones guardadas en la nube asociadas a este login
+            let cloudOrgs = supaUser.user_metadata?.organizations as Organization[] | undefined;
+
+            if (cloudOrgs && Array.isArray(cloudOrgs) && cloudOrgs.length > 0) {
+              setOrganizations(cloudOrgs);
+              const defaultBiz = cloudOrgs.find((o) => o.type === 'business');
+              setActiveOrgId(defaultBiz ? defaultBiz.id : cloudOrgs[0].id);
+            } else {
+              // Si no tiene organizaciones en la nube aún, crearlas inteligentemente
+              const isWebunica = supaUser.email?.includes('webunica');
+              const defaultBizId = isWebunica ? 'd5e5b678-4d44-4ba3-b763-a68d43fd8679' : ensureUUID();
+              const defaultBizName = isWebunica ? 'Webunica Chile' : 'Mi Empresa SpA';
+
+              const initialOrgs: Organization[] = [
+                {
+                  id: defaultBizId,
+                  name: defaultBizName,
+                  legal_name: isWebunica ? 'Webunica Chile SpA' : defaultBizName,
+                  rut: isWebunica ? '77.123.456-7' : null,
+                  type: 'business',
+                  created_by: supaUser.id,
+                  created_at: new Date().toISOString(),
+                  updated_at: new Date().toISOString(),
+                  members_count: 1,
+                  assigned_salary: isWebunica ? 800000 : null,
+                  monthly_expenses: isWebunica
+                    ? {
+                        assigned_salary: 800000,
+                        rent: 0,
+                        internet: 25000,
+                        mobile: 0,
+                        electricity: 0,
+                        water: 0,
+                        other_fixed: 0,
+                      }
+                    : null,
+                },
+                {
+                  id: ensureUUID(),
+                  name: 'Finanzas Personales',
+                  legal_name: userProfile.full_name,
+                  rut: null,
+                  type: 'personal',
+                  created_by: supaUser.id,
+                  created_at: new Date().toISOString(),
+                  updated_at: new Date().toISOString(),
+                  members_count: 1,
+                },
+              ];
+
+              setOrganizations(initialOrgs);
+              setActiveOrgId(defaultBizId);
+
+              // Guardar en Supabase Auth user_metadata para persistencia entre dominios/dispositivos
+              await supabase.auth.updateUser({
+                data: { organizations: initialOrgs },
+              }).catch(() => {});
+            }
           }
         }).catch(() => {});
       }
@@ -143,6 +202,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let userId = ensureUUID();
     const namePart = cleanEmail.split('@')[0];
     const fullName = namePart.charAt(0).toUpperCase() + namePart.slice(1);
+    let remoteOrgs: Organization[] | null = null;
 
     if (isSupabaseConfigured()) {
       try {
@@ -154,7 +214,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (authData?.user) {
           userId = authData.user.id;
-        } else if (authError && (authError.message.toLowerCase().includes('invalid') || authError.message.toLowerCase().includes('credentials') || authError.message.toLowerCase().includes('not found'))) {
+          if (
+            authData.user.user_metadata?.organizations &&
+            Array.isArray(authData.user.user_metadata.organizations) &&
+            authData.user.user_metadata.organizations.length > 0
+          ) {
+            remoteOrgs = authData.user.user_metadata.organizations;
+          }
+        } else if (
+          authError &&
+          (authError.message.toLowerCase().includes('invalid') ||
+            authError.message.toLowerCase().includes('credentials') ||
+            authError.message.toLowerCase().includes('not found'))
+        ) {
           // Si no existe, registrar automáticamente en Supabase Auth
           const { data: signUpData } = await supabase.auth.signUp({
             email: cleanEmail,
@@ -184,9 +256,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     setUser(loggedUser);
-    setOrganizations((prev) => {
-      if (prev.length > 0) return prev;
-      return [
+
+    let finalOrgs: Organization[] = [];
+    if (remoteOrgs && remoteOrgs.length > 0) {
+      finalOrgs = remoteOrgs;
+    } else {
+      const isWebunica = cleanEmail.includes('webunica');
+      const companyId = isWebunica ? 'd5e5b678-4d44-4ba3-b763-a68d43fd8679' : ensureUUID();
+      const companyName = isWebunica ? 'Webunica Chile' : 'Mi Empresa SpA';
+
+      finalOrgs = [
+        {
+          id: companyId,
+          name: companyName,
+          rut: isWebunica ? '77.123.456-7' : null,
+          legal_name: isWebunica ? 'Webunica Chile SpA' : companyName,
+          type: 'business',
+          created_by: userId,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          members_count: 1,
+          assigned_salary: isWebunica ? 800000 : null,
+          monthly_expenses: isWebunica
+            ? {
+                assigned_salary: 800000,
+                rent: 0,
+                internet: 25000,
+                mobile: 0,
+                electricity: 0,
+                water: 0,
+                other_fixed: 0,
+              }
+            : null,
+        },
         {
           id: ensureUUID(),
           name: 'Finanzas Personales',
@@ -199,7 +301,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           members_count: 1,
         },
       ];
-    });
+
+      // Sincronizar en la nube
+      if (isSupabaseConfigured()) {
+        const supabase = getSupabaseBrowserClient();
+        supabase.auth.updateUser({ data: { organizations: finalOrgs } }).catch(() => {});
+      }
+    }
+
+    setOrganizations(finalOrgs);
+    const defaultBiz = finalOrgs.find((o) => o.type === 'business');
+    setActiveOrgId(defaultBiz ? defaultBiz.id : finalOrgs[0].id);
+
     setIsLoading(false);
     return true;
   };
@@ -319,8 +432,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       members_count: 1,
     };
 
-    setOrganizations((prev) => [...prev, newOrg]);
+    const updated = [...organizations, newOrg];
+    setOrganizations(updated);
     setActiveOrgId(newOrg.id);
+    if (isSupabaseConfigured()) {
+      const supabase = getSupabaseBrowserClient();
+      supabase.auth.updateUser({ data: { organizations: updated } }).catch(() => {});
+    }
     return newOrg;
   };
 
@@ -336,33 +454,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       monthly_expenses?: MonthlyFixedExpenses | null;
     }
   ) => {
-    setOrganizations((prev) =>
-      prev.map((org) => {
-        if (org.id !== id) return org;
-        return {
-          ...org,
-          name: data.name.trim(),
-          rut: data.rut !== undefined ? (data.rut ? data.rut.trim() : null) : org.rut,
-          legal_name:
-            data.legal_name !== undefined
-              ? (data.legal_name ? data.legal_name.trim() : data.name.trim())
-              : org.legal_name,
-          type: data.type || org.type,
-          assigned_salary: data.assigned_salary !== undefined ? data.assigned_salary : org.assigned_salary,
-          team_salaries: data.team_salaries !== undefined ? data.team_salaries : org.team_salaries,
-          monthly_expenses: data.monthly_expenses !== undefined ? data.monthly_expenses : org.monthly_expenses,
-          updated_at: new Date().toISOString(),
-        };
-      })
-    );
+    const updated = organizations.map((org) => {
+      if (org.id !== id) return org;
+      return {
+        ...org,
+        name: data.name.trim(),
+        rut: data.rut !== undefined ? (data.rut ? data.rut.trim() : null) : org.rut,
+        legal_name:
+          data.legal_name !== undefined
+            ? (data.legal_name ? data.legal_name.trim() : data.name.trim())
+            : org.legal_name,
+        type: data.type || org.type,
+        assigned_salary: data.assigned_salary !== undefined ? data.assigned_salary : org.assigned_salary,
+        team_salaries: data.team_salaries !== undefined ? data.team_salaries : org.team_salaries,
+        monthly_expenses: data.monthly_expenses !== undefined ? data.monthly_expenses : org.monthly_expenses,
+        updated_at: new Date().toISOString(),
+      };
+    });
+
+    setOrganizations(updated);
+    if (isSupabaseConfigured()) {
+      const supabase = getSupabaseBrowserClient();
+      supabase.auth.updateUser({ data: { organizations: updated } }).catch(() => {});
+    }
   };
 
   const deleteOrganization = (id: string): boolean => {
     if (organizations.length <= 1) return false;
-    setOrganizations((prev) => prev.filter((o) => o.id !== id));
+    const updated = organizations.filter((o) => o.id !== id);
+    setOrganizations(updated);
     if (activeOrgId === id) {
       const remaining = organizations.filter((o) => o.id !== id);
       setActiveOrgId(remaining[0]?.id || 'all');
+    }
+    if (isSupabaseConfigured()) {
+      const supabase = getSupabaseBrowserClient();
+      supabase.auth.updateUser({ data: { organizations: updated } }).catch(() => {});
     }
     return true;
   };
