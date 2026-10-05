@@ -37,7 +37,7 @@ interface ReceiptsContextType {
   budgets: MonthlyBudget[];
   debts: AccountPayable[];
   receivables: AccountReceivable[];
-  addReceipt: (newDoc: Partial<ExpenseDocument> & { items?: Partial<ExpenseItem>[] }) => ExpenseDocument;
+  addReceipt: (newDoc: Omit<Partial<ExpenseDocument>, 'items'> & { items?: Partial<ExpenseItem>[] }) => ExpenseDocument;
   updateReceipt: (id: string, updatedFields: Partial<ExpenseDocument>) => void;
   deleteReceipt: (id: string) => void;
   updateReceiptItem: (docId: string, itemId: string, updatedFields: Partial<ExpenseItem>) => void;
@@ -284,7 +284,7 @@ export function ReceiptsProvider({ children }: { children: React.ReactNode }) {
     }
   }, [receipts, categories, budgets, debts, receivables, isLoaded]);
 
-  const addReceipt = (newDoc: Partial<ExpenseDocument> & { items?: Partial<ExpenseItem>[] }) => {
+  const addReceipt = (newDoc: Omit<Partial<ExpenseDocument>, 'items'> & { items?: Partial<ExpenseItem>[] }) => {
     const docId = ensureUUID();
     const formattedItems: ExpenseItem[] = (newDoc.items || []).map((it) => ({
       id: ensureUUID(it.id),
@@ -312,9 +312,18 @@ export function ReceiptsProvider({ children }: { children: React.ReactNode }) {
 
     const breakdown = calculateTotalsBreakdown(formattedItems);
 
+    const finalTotal = newDoc.total_amount ?? (breakdown.itemsSum > 0 ? breakdown.itemsSum : 0);
+    const finalBusiness = newDoc.business_total !== undefined
+      ? newDoc.business_total
+      : (breakdown.businessTotal > 0 ? breakdown.businessTotal : (newDoc.expense_type === 'business' ? finalTotal : 0));
+    const finalPersonal = newDoc.personal_total !== undefined
+      ? newDoc.personal_total
+      : (breakdown.personalTotal > 0 ? breakdown.personalTotal : (newDoc.expense_type === 'personal' ? finalTotal : 0));
+
     const doc: ExpenseDocument = {
       id: docId,
       user_id: currentUserId,
+      organization_id: newDoc.organization_id !== undefined ? newDoc.organization_id : null,
       merchant_name: newDoc.merchant_name || 'Comercio por verificar',
       merchant_legal_name: newDoc.merchant_legal_name || null,
       merchant_rut: newDoc.merchant_rut || null,
@@ -324,25 +333,26 @@ export function ReceiptsProvider({ children }: { children: React.ReactNode }) {
       document_date: newDoc.document_date || new Date().toISOString().split('T')[0],
       document_time: newDoc.document_time || '12:00',
       currency: newDoc.currency || 'CLP',
-      subtotal: newDoc.subtotal ?? breakdown.itemsSum,
+      subtotal: newDoc.subtotal ?? (breakdown.itemsSum > 0 ? breakdown.itemsSum : finalTotal),
       discount: newDoc.discount ?? 0,
-      net_amount: newDoc.net_amount ?? Math.round((newDoc.total_amount || breakdown.itemsSum) / 1.19),
-      tax_amount: newDoc.tax_amount ?? Math.round(((newDoc.total_amount || breakdown.itemsSum) * 0.19) / 1.19),
+      net_amount: newDoc.net_amount ?? Math.round(finalTotal / 1.19),
+      tax_amount: newDoc.tax_amount ?? Math.round((finalTotal * 0.19) / 1.19),
       tip: newDoc.tip ?? 0,
-      total_amount: newDoc.total_amount ?? breakdown.itemsSum,
-      business_total: breakdown.businessTotal,
-      personal_total: breakdown.personalTotal,
-      expense_type: newDoc.expense_type || (breakdown.businessTotal > 0 && breakdown.personalTotal > 0 ? 'mixed' : breakdown.businessTotal > 0 ? 'business' : 'personal'),
+      total_amount: finalTotal,
+      business_total: finalBusiness,
+      personal_total: finalPersonal,
+      expense_type: newDoc.expense_type || (finalBusiness > 0 && finalPersonal > 0 ? 'mixed' : finalBusiness > 0 ? 'business' : 'personal'),
       payment_method: newDoc.payment_method || 'Débito',
-      status: newDoc.status || 'needs_review',
-      ocr_confidence: newDoc.ocr_confidence ?? 0.88,
-      ai_confidence: newDoc.ai_confidence ?? 0.90,
-      requires_human_review: newDoc.requires_human_review ?? true,
+      status: newDoc.status || (newDoc.requires_human_review ? 'needs_review' : 'approved'),
+      ocr_confidence: newDoc.ocr_confidence ?? 1.0,
+      ai_confidence: newDoc.ai_confidence ?? 1.0,
+      requires_human_review: newDoc.requires_human_review ?? false,
       purchase_summary: newDoc.purchase_summary || null,
       detected_items_reference: newDoc.detected_items_reference || null,
       category_name: newDoc.category_name || null,
       warnings: newDoc.warnings || [],
-      file_name: newDoc.file_name || 'documento_subido.jpg',
+      file_name: newDoc.file_name || null,
+      file_url: newDoc.file_url || null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       items: formattedItems,

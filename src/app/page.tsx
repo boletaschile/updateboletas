@@ -39,8 +39,10 @@ import {
   PiggyBank,
   ShieldCheck,
   Check,
+  UploadCloud,
 } from 'lucide-react';
 import { MonthlyClosingChecklist } from '@/components/dashboard/monthly-closing-checklist';
+import { NewExpenseModal } from '@/components/receipts/new-expense-modal';
 import {
   BarChart,
   Bar,
@@ -60,6 +62,7 @@ const CHART_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EC4899', '#8B5CF6', '#0
 export default function DashboardPage() {
   const { receipts, budgets, debts, receivables } = useReceipts();
   const { activeOrgId, activeOrg, organizations, setActiveOrgId, user } = useAuth();
+  const [isAddExpenseOpen, setIsAddExpenseOpen] = useState(false);
 
   const businessOrgs = useMemo(() => organizations.filter((o) => o.type !== 'personal'), [organizations]);
   const personalOrgs = useMemo(() => organizations.filter((o) => o.type === 'personal'), [organizations]);
@@ -518,6 +521,13 @@ export default function DashboardPage() {
                   <span>Cuentas por Pagar</span>
                 </Button>
               </Link>
+              <Button
+                onClick={() => setIsAddExpenseOpen(true)}
+                className="bg-white text-slate-950 hover:bg-slate-100 gap-2 font-semibold shadow-md text-xs"
+              >
+                <PlusCircle className="h-4 w-4 text-blue-600" />
+                <span>+ Agregar Gasto</span>
+              </Button>
               <Link
                 href={
                   selectedMonth !== ALL_MONTHS
@@ -525,9 +535,12 @@ export default function DashboardPage() {
                     : '/receipts/new?type=business'
                 }
               >
-                <Button className="bg-white text-slate-950 hover:bg-slate-100 gap-2 font-semibold shadow-md text-xs">
-                  <PlusCircle className="h-4 w-4 text-blue-600" />
-                  <span>Nueva Boleta Empresa</span>
+                <Button
+                  variant="outline"
+                  className="border-blue-400/30 bg-blue-950/40 text-blue-100 hover:bg-blue-900/60 gap-1.5 font-medium text-xs"
+                >
+                  <UploadCloud className="h-4 w-4 text-blue-300" />
+                  <span>Escanear Boleta</span>
                 </Button>
               </Link>
             </div>
@@ -567,6 +580,13 @@ export default function DashboardPage() {
                   <span>Compromisos del Hogar</span>
                 </Button>
               </Link>
+              <Button
+                onClick={() => setIsAddExpenseOpen(true)}
+                className="bg-white text-slate-950 hover:bg-slate-100 gap-2 font-semibold shadow-md text-xs"
+              >
+                <PlusCircle className="h-4 w-4 text-emerald-600" />
+                <span>+ Agregar Gasto</span>
+              </Button>
               <Link
                 href={
                   selectedMonth !== ALL_MONTHS
@@ -574,9 +594,12 @@ export default function DashboardPage() {
                     : '/receipts/new?type=personal'
                 }
               >
-                <Button className="bg-white text-slate-950 hover:bg-slate-100 gap-2 font-semibold shadow-md text-xs">
-                  <PlusCircle className="h-4 w-4 text-emerald-600" />
-                  <span>Nueva Boleta Personal</span>
+                <Button
+                  variant="outline"
+                  className="border-teal-400/30 bg-teal-950/40 text-teal-100 hover:bg-teal-900/60 gap-1.5 font-medium text-xs"
+                >
+                  <UploadCloud className="h-4 w-4 text-teal-300" />
+                  <span>Escanear Boleta</span>
                 </Button>
               </Link>
             </div>
@@ -1370,6 +1393,12 @@ export default function DashboardPage() {
           </Card>
         </div>
       </div>
+
+      <NewExpenseModal
+        isOpen={isAddExpenseOpen}
+        onClose={() => setIsAddExpenseOpen(false)}
+        defaultExpenseType={isPersonalMode ? 'personal' : 'business'}
+      />
     </AppLayout>
   );
 }

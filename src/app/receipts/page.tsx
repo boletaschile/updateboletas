@@ -31,12 +31,14 @@ import {
 } from 'lucide-react';
 
 import { useAuth } from '@/lib/store/auth-context';
+import { NewExpenseModal } from '@/components/receipts/new-expense-modal';
 
 export default function ReceiptsListPage() {
   const router = useRouter();
   const { receipts, deleteReceipt, approveReceipt, debts } = useReceipts();
   const { activeOrgId, activeOrg } = useAuth();
 
+  const [isAddExpenseOpen, setIsAddExpenseOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
@@ -146,53 +148,71 @@ export default function ReceiptsListPage() {
       description="Consulta, filtra, revisa y exporta todos los comprobantes y boletas registradas."
     >
       <div className="space-y-6">
-        {/* Resumen Superior */}
+        {/* Resumen Superior Aislado por Perfil */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Tarjeta 1: Total del Perfil */}
           <Card className="p-4 flex items-center justify-between">
             <div>
-              <p className="text-xs text-muted-foreground font-medium">Total Filtrado</p>
-              <h3 className="text-xl font-bold text-foreground mt-0.5">{formatCLP(totalAmount + totalPaidDebts)}</h3>
+              <p className="text-xs text-muted-foreground font-medium">
+                {isPersonalMode ? 'Gasto Total Personal' : 'Gasto Total Empresa'}
+              </p>
+              <h3 className={`text-xl font-bold mt-0.5 ${isPersonalMode ? 'text-emerald-600' : 'text-blue-600'}`}>
+                {isPersonalMode
+                  ? formatCLP(totalPersonal + paidDebtsPersonal)
+                  : formatCLP(totalBusiness + paidDebtsBusiness)}
+              </h3>
               <p className="text-[11px] text-muted-foreground">
-                {totalPaidDebts > 0
-                  ? `${filteredReceipts.length} boletas + ${scopedPaidDebts.length} deudas pagadas`
-                  : `${filteredReceipts.length} documentos`}
+                {isPersonalMode ? '100% compras particulares' : '100% compras operacionales'}
               </p>
             </div>
-            <div className="h-10 w-10 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-600 flex items-center justify-center">
+            <div
+              className={`h-10 w-10 rounded-full flex items-center justify-center ${
+                isPersonalMode
+                  ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600'
+                  : 'bg-blue-100 dark:bg-blue-900/40 text-blue-600'
+              }`}
+            >
+              {isPersonalMode ? <User className="h-5 w-5" /> : <Building2 className="h-5 w-5" />}
+            </div>
+          </Card>
+
+          {/* Tarjeta 2: Boletas Registradas en este Perfil */}
+          <Card className="p-4 flex items-center justify-between">
+            <div>
+              <p className="text-xs text-muted-foreground font-medium">
+                {isPersonalMode ? 'Boletas del Hogar' : 'Boletas y Facturas'}
+              </p>
+              <h3 className="text-xl font-bold text-foreground mt-0.5">
+                {formatCLP(isPersonalMode ? totalPersonal : totalBusiness)}
+              </h3>
+              <p className="text-[11px] text-muted-foreground">
+                {filteredReceipts.length} comprobante(s) en este período
+              </p>
+            </div>
+            <div className="h-10 w-10 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center justify-center">
               <Receipt className="h-5 w-5" />
             </div>
           </Card>
 
+          {/* Tarjeta 3: Compromisos Pagados del Perfil */}
           <Card className="p-4 flex items-center justify-between">
             <div>
-              <p className="text-xs text-muted-foreground font-medium">Gastos Empresa</p>
-              <h3 className="text-xl font-bold text-blue-600 mt-0.5">{formatCLP(totalBusiness + paidDebtsBusiness)}</h3>
+              <p className="text-xs text-muted-foreground font-medium">
+                {isPersonalMode ? 'Cuentas del Hogar Pagadas' : 'Cuentas Empresa Pagadas'}
+              </p>
+              <h3 className="text-xl font-bold text-foreground mt-0.5">
+                {formatCLP(isPersonalMode ? paidDebtsPersonal : paidDebtsBusiness)}
+              </h3>
               <p className="text-[11px] text-muted-foreground">
-                {paidDebtsBusiness > 0
-                  ? `Boletas: ${formatCLP(totalBusiness)} • Cuotas: ${formatCLP(paidDebtsBusiness)}`
-                  : 'Deducibles / Operacionales'}
+                {scopedPaidDebts.length} compromiso(s) liquidado(s)
               </p>
             </div>
-            <div className="h-10 w-10 rounded-full bg-blue-50 dark:bg-blue-950 text-blue-600 flex items-center justify-center">
-              <Building2 className="h-5 w-5" />
+            <div className="h-10 w-10 rounded-full bg-indigo-50 dark:bg-indigo-950 text-indigo-600 flex items-center justify-center">
+              <Layers className="h-5 w-5" />
             </div>
           </Card>
 
-          <Card className="p-4 flex items-center justify-between">
-            <div>
-              <p className="text-xs text-muted-foreground font-medium">Gastos Personales</p>
-              <h3 className="text-xl font-bold text-emerald-600 mt-0.5">{formatCLP(totalPersonal + paidDebtsPersonal)}</h3>
-              <p className="text-[11px] text-muted-foreground">
-                {paidDebtsPersonal > 0
-                  ? `Boletas: ${formatCLP(totalPersonal)} • Cuotas: ${formatCLP(paidDebtsPersonal)}`
-                  : 'Gastos particulares'}
-              </p>
-            </div>
-            <div className="h-10 w-10 rounded-full bg-emerald-50 dark:bg-emerald-950 text-emerald-600 flex items-center justify-center">
-              <User className="h-5 w-5" />
-            </div>
-          </Card>
-
+          {/* Tarjeta 4: Por Revisar */}
           <Card className="p-4 flex items-center justify-between">
             <div>
               <p className="text-xs text-muted-foreground font-medium">Por Revisar</p>
@@ -284,10 +304,18 @@ export default function ReceiptsListPage() {
                   <span>Importar Excel</span>
                 </Button>
               </Link>
+              <Button
+                size="sm"
+                onClick={() => setIsAddExpenseOpen(true)}
+                className="gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-sm"
+              >
+                <PlusCircle className="h-3.5 w-3.5" />
+                <span>+ Agregar Gasto</span>
+              </Button>
               <Link href={selectedMonth !== ALL_MONTHS ? `/receipts/new?month=${selectedMonth}` : '/receipts/new'}>
-                <Button size="sm" className="gap-1.5 text-xs">
-                  <PlusCircle className="h-3.5 w-3.5" />
-                  <span>Nueva Boleta</span>
+                <Button size="sm" variant="outline" className="gap-1.5 text-xs">
+                  <UploadCloud className="h-3.5 w-3.5" />
+                  <span>Escanear Boleta (OCR)</span>
                 </Button>
               </Link>
             </div>
@@ -448,6 +476,12 @@ export default function ReceiptsListPage() {
           </div>
         </Card>
       </div>
+
+      <NewExpenseModal
+        isOpen={isAddExpenseOpen}
+        onClose={() => setIsAddExpenseOpen(false)}
+        defaultExpenseType={isPersonalMode ? 'personal' : 'business'}
+      />
     </AppLayout>
   );
 }
